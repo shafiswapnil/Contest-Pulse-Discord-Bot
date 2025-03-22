@@ -1,6 +1,6 @@
 const schedule = require('node-schedule');
 const { fetchContests } = require('./contestService');
-const { createContestEmbed, formatDateInTimezone } = require('../utils/embedFormatter');
+const { createContestEmbed, formatDateInTimezone, formatTimeRemaining } = require('../utils/embedFormatter');
 const { Client, EmbedBuilder } = require('discord.js');
 const contestService = require('./contestService');
 
@@ -96,8 +96,11 @@ function scheduleReminder(client, contest, reminderTime, timeText, contestId) {
         return;
       }
       
-      // Create embed for the specific contest
-      const embed = createContestEmbed(contest, `Starts in ${timeText}`);
+      // Calculate exact time remaining at the moment of sending
+      const exactTimeRemaining = formatTimeRemaining(contest.startTimeMs);
+      
+      // Create embed for the specific contest with dynamic time remaining
+      const embed = createContestEmbed(contest, `Starts in ${exactTimeRemaining}`);
       
       // Add an @everyone mention if a role ID is configured
       const roleId = process.env.CONTEST_ROLE_ID;
@@ -108,7 +111,7 @@ function scheduleReminder(client, contest, reminderTime, timeText, contestId) {
       }
       
       await channel.send({
-        content: `${mentionText}Contest reminder!`,
+        content: `${mentionText}Contest reminder! **${contest.name}** starts in **${exactTimeRemaining}**`,
         embeds: [embed]
       });
       
@@ -161,20 +164,6 @@ async function sendTodayContestReminders(client, channel) {
     
     console.log(`Found ${todayContests.length} contests happening today`);
     
-    // Filter out contests that start too soon (less than 6 hours from now)
-    // to avoid cluttering the channel with reminders for contests that are about to start
-    const sixHoursInMs = 6 * 60 * 60 * 1000;
-    const minStartTime = Date.now() + sixHoursInMs;
-    
-    // Keep contests that are at least 6 hours away
-    const filteredContests = todayContests.filter(contest => {
-      const isFarEnough = contest.startTimeMs >= minStartTime;
-      if (!isFarEnough) {
-        console.log(`Skipping reminder for contest "${contest.name}" as it starts in less than 6 hours`);
-      }
-      return isFarEnough;
-    });
-    
     // Sort by start time
     todayContests = todayContests.sort((a, b) => a.startTimeMs - b.startTimeMs);
     
@@ -186,26 +175,26 @@ async function sendTodayContestReminders(client, channel) {
     
     // Calculate time until contest starts for each contest
     todayContests.forEach(contest => {
-      const timeUntilStart = contest.startTimeMs - Date.now();
+      // Calculate exact time remaining at the moment of sending
+      const timeRemaining = formatTimeRemaining(contest.startTimeMs);
       
-      // Format the time until start
-      let timingMessage;
-      if (timeUntilStart <= 0) {
-        // Contest has already started
-        const minutesAgo = Math.floor((Date.now() - contest.startTimeMs) / (60 * 1000));
-        timingMessage = `Started ${minutesAgo} minute${minutesAgo === 1 ? '' : 's'} ago`;
-      } else {
-        // Contest will start in the future
-        const hoursUntil = Math.floor(timeUntilStart / (60 * 60 * 1000));
-        const minsUntil = Math.floor((timeUntilStart % (60 * 60 * 1000)) / (60 * 1000));
-        timingMessage = `Starts in ${hoursUntil}h ${minsUntil}m`;
+      console.log(`Contest "${contest.name}" time remaining: "${timeRemaining}"`);
+      
+      // Create embed with time remaining information
+      const embed = createContestEmbed(contest, `🔔 Today's Contest: ${timeRemaining}`, 0x3498db);
+      
+      // Add role mention if configured
+      const roleId = process.env.CONTEST_ROLE_ID;
+      let mentionText = '';
+      
+      if (roleId && roleId !== 'your_contest_role_id_here') {
+        mentionText = `<@&${roleId}> `;
       }
       
-      console.log(`Contest "${contest.name}" timing message: "${timingMessage}"`);
-      
-      // Send a notification for this contest
-      const embed = createContestEmbed(contest, `🔔 Today's Contest: ${timingMessage}`, 0x3498db);
-      channel.send({ embeds: [embed] });
+      channel.send({
+        content: `${mentionText}Today's Contest: **${contest.name}** starts in **${timeRemaining}**`,
+        embeds: [embed]
+      });
     });
     
     return todayContests.length > 0;
@@ -229,6 +218,9 @@ async function checkTomorrowContests(client, channel) {
     const contests = await contestService.fetchContests(3);
     if (!contests || contests.length === 0) {
       console.log('No upcoming contests found');
+      if (channel) {
+        channel.send('No programming contests are scheduled for tomorrow.');
+      }
       return false;
     }
     
@@ -250,28 +242,57 @@ async function checkTomorrowContests(client, channel) {
     
     if (tomorrowContests.length === 0) {
       console.log('No contests happening tomorrow');
+      if (channel) {
+        channel.send('No programming contests are scheduled for tomorrow.');
+      }
       return false;
     }
     
-    console.log(`Found ${tomorrowContests.length} contests happening tomorrow (${tomorrowStr})`);
+    console.log(`Found ${tomorrowContests.length} contests happening tomorrow`);
     
-    // Sort by start time
-    tomorrowContests.sort((a, b) => a.startTimeMs - b.startTimeMs);
+    // Sort contests by start time
+    const sortedContests = tomorrowContests.sort((a, b) => a.startTimeMs - b.startTimeMs);
+    
+    // Get channel to send notifications
+    let targetChannel = channel;
+    if (!targetChannel) {
+      const channelId = process.env.DISCORD_CHANNEL_ID;
+      targetChannel = await client.channels.fetch(channelId);
+      if (!targetChannel) {
+        console.error(`Could not find channel with ID ${channelId}`);
+        return false;
+      }
+    }
     
     // Send a summary message first
-    const contestNames = tomorrowContests.map(c => `${c.name} (${c.platform})`).join('\n• ');
-    const summaryEmbed = new EmbedBuilder()
-      .setColor(0x3498db) // Blue color
-      .setTitle(`📅 ${tomorrowContests.length} Contest${tomorrowContests.length > 1 ? 's' : ''} Tomorrow!`)
-      .setDescription(`Get ready for these contests tomorrow:\n\n• ${contestNames}`)
-      .setFooter({ text: `Tomorrow: ${tomorrowStr}` });
+    const summary = new EmbedBuilder()
+      .setTitle("Tomorrow's Programming Contests")
+      .setColor(0x4CAF50)
+      .setDescription(`${sortedContests.length} contest${sortedContests.length === 1 ? '' : 's'} scheduled for tomorrow.`)
+      .setTimestamp();
     
-    await channel.send({ embeds: [summaryEmbed] });
+    await targetChannel.send({ embeds: [summary] });
     
-    // Send individual contest details
-    for (const contest of tomorrowContests) {
-      const embed = createContestEmbed(contest, '📅 Contest Tomorrow', 0x3498db);
-      await channel.send({ embeds: [embed] });
+    // Send individual contest notifications
+    for (const contest of sortedContests) {
+      // Calculate exact time remaining at the moment of sending
+      const timeRemaining = formatTimeRemaining(contest.startTimeMs);
+      
+      // Create contest embed with time remaining
+      const embed = createContestEmbed(contest, `🔔 Tomorrow's Contest: ${timeRemaining}`, 0xFFA500);
+      
+      // Add role mention if configured
+      const roleId = process.env.CONTEST_ROLE_ID;
+      let mentionText = '';
+      
+      if (roleId && roleId !== 'your_contest_role_id_here') {
+        mentionText = `<@&${roleId}> `;
+      }
+      
+      await targetChannel.send({
+        content: `${mentionText}Tomorrow's Contest: **${contest.name}** starts in **${timeRemaining}**`,
+        embeds: [embed]
+      });
     }
     
     return true;
@@ -335,39 +356,73 @@ function clearAllReminders() {
 
 /**
  * Schedules reminders for all provided contests
- * @param {Client} client - Discord.js client
- * @param {Array} contests - Array of contest objects to schedule reminders for
+ * @param {Discord.Client} client - Discord client
+ * @param {Array} contests - Array of contest objects
  */
 function scheduleReminders(client, contests) {
-  console.log(`Setting up reminders for ${contests.length} contests`);
-  
-  // Clear existing scheduled jobs first
+  // Clean up any existing schedules
   clearAllReminders();
   
+  // Reset reminder tracking sets
+  sentReminders.day = new Set();
+  sentReminders.hours = new Set();
+  sentReminders.minutes = new Set();
+  
+  // Get current time
   const now = Date.now();
   
-  // For each contest, schedule reminders at different time points
+  // Process each contest
   contests.forEach(contest => {
-    const contestStartTime = contest.startTimeMs;
-    const contestId = `${contest.platform}-${contest.name}-${contestStartTime}`;
+    // Create a unique ID for this contest
+    const contestId = `${contest.platform}-${contest.name}-${contest.startTimeMs}`;
     
-    // Schedule 1 day reminder
-    const oneDayBefore = contestStartTime - (24 * 60 * 60 * 1000);
-    if (oneDayBefore > now) {
-      scheduleReminder(client, contest, oneDayBefore, '1 day', contestId);
+    // Calculate time until contest
+    const timeUntilContest = contest.startTimeMs - now;
+    
+    // Skip if contest is in the past
+    if (timeUntilContest <= 0) {
+      return;
     }
     
-    // Schedule 6 hour reminder
-    const sixHoursBefore = contestStartTime - (6 * 60 * 60 * 1000);
-    if (sixHoursBefore > now) {
-      scheduleReminder(client, contest, sixHoursBefore, '6 hours', contestId);
+    // Define standard reminder times
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    const sixHoursMs = 6 * 60 * 60 * 1000;
+    const thirtyMinutesMs = 30 * 60 * 1000;
+    
+    // Schedule each type of reminder if applicable
+    // 1-day reminder, only if contest is more than a day away
+    if (timeUntilContest > oneDayMs) {
+      const reminderTime = contest.startTimeMs - oneDayMs;
+      scheduleReminder(client, contest, reminderTime, '1 day', contestId);
     }
     
-    // Schedule 30 minute reminder
-    const thirtyMinsBefore = contestStartTime - (30 * 60 * 1000);
-    if (thirtyMinsBefore > now) {
-      scheduleReminder(client, contest, thirtyMinsBefore, '30 minutes', contestId);
+    // 6-hour reminder, only if contest is more than 6 hours away
+    if (timeUntilContest > sixHoursMs) {
+      const reminderTime = contest.startTimeMs - sixHoursMs;
+      scheduleReminder(client, contest, reminderTime, '6 hours', contestId);
     }
+    
+    // 30-minute reminder, only if contest is more than 30 minutes away
+    if (timeUntilContest > thirtyMinutesMs) {
+      const reminderTime = contest.startTimeMs - thirtyMinutesMs;
+      scheduleReminder(client, contest, reminderTime, '30 minutes', contestId);
+    }
+    
+    // Add a dynamic reminder for contests that are starting soon but more than 30 minutes away
+    // This helps with contests happening in the next few hours
+    if (timeUntilContest > thirtyMinutesMs && timeUntilContest < sixHoursMs) {
+      // Schedule a reminder at the midpoint between now and contest start
+      const midpointTime = now + (timeUntilContest / 2);
+      scheduleReminder(client, contest, midpointTime, 'soon', contestId);
+    }
+    
+    // If the contest is very close (within 30 minutes)
+    if (timeUntilContest <= thirtyMinutesMs) {
+      // Schedule an immediate reminder
+      scheduleReminder(client, contest, now + 1000, 'imminent', contestId);
+    }
+    
+    console.log(`Scheduled reminders for contest: ${contest.name} (${contest.platform})`);
   });
 }
 
