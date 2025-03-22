@@ -9,6 +9,7 @@ A Discord bot that provides timely reminders for upcoming Codeforces and AtCoder
 - **Customizable Commands**: Check for contests today, tomorrow, or get a full list
 - **Smart Filtering**: Only sends reminders for contests that are at least 6 hours away when checking today's contests
 - **Multiple Data Sources**: Uses both Codeforces API and Clist.by for reliable contest information
+- **Localized Time Display**: Shows contest times in your preferred timezone (e.g., Bangladesh time)
 - **Optimized for Railway Deployment**: Includes health checks and monitoring
 - **Automatic Scheduling**: Refreshes contest information daily
 
@@ -29,6 +30,7 @@ The bot fetches contest information from multiple sources and schedules automate
 2. **Reminder Scheduling**: Sets up scheduled reminders for each contest at specified intervals
 3. **Targeted Notifications**: Sends individual contest announcements rather than cluttered lists
 4. **Daily Refresh**: Updates contest information and reminders daily
+5. **Timezone Support**: Displays all times in your configured timezone (e.g., Asia/Dhaka for Bangladesh)
 
 ## Reminder System
 
@@ -41,7 +43,7 @@ Instead of sending one large message with all contests, the bot sends:
 Each reminder includes:
 
 - Contest name and platform (Codeforces or AtCoder)
-- Date and time information
+- Date and time information in your local timezone
 - Link to the contest page
 
 ## File Structure and Purpose
@@ -49,7 +51,7 @@ Each reminder includes:
 - `index.js` - Main entry point with Discord bot setup and command handling
 - `services/contestService.js` - Contest data fetching from various platforms
 - `services/reminderService.js` - Handles scheduling and sending timed reminders
-- `utils/embedFormatter.js` - Formats contest data into Discord embedded messages
+- `utils/embedFormatter.js` - Formats contest data into Discord embedded messages with timezone support
 - `utils/healthCheck.js` - Provides functions to check API connectivity
 
 ## Setup
@@ -88,6 +90,7 @@ DISCORD_TOKEN=your_bot_token
 DISCORD_CHANNEL_ID=your_announcement_channel_id
 CLIST_USERNAME=your_clist_username
 CLIST_API_KEY=your_clist_api_key
+TIMEZONE=Asia/Dhaka  # For Bangladesh time
 CONTEST_ROLE_ID=optional_role_to_mention  # Optional
 CONTEST_CHECK_SCHEDULE=0 12 * * *  # Daily at 12:00 UTC (cron format)
 ```
@@ -119,12 +122,26 @@ npm run dev
 | `DISCORD_CHANNEL_ID`     | Channel ID for contest announcements         | -               | Yes      |
 | `CLIST_USERNAME`         | Clist.by username                            | -               | Yes\*    |
 | `CLIST_API_KEY`          | Clist.by API key                             | -               | Yes\*    |
+| `TIMEZONE`               | Timezone for displaying dates and times      | UTC             | No       |
 | `CONTEST_ROLE_ID`        | Role ID to mention for contest announcements | -               | No       |
 | `CONTEST_DAYS_AHEAD`     | Number of days to look ahead for contests    | 7               | No       |
 | `CONTEST_CHECK_SCHEDULE` | Cron schedule for checking contests          | '0 12 \* \* \*' | No       |
 | `PORT`                   | Port for the health check server             | 3000            | No       |
 
 \*Required for reliable AtCoder contest information. The bot will fall back to AtCoder Problems API if not provided.
+
+## Timezone Configuration
+
+For Bangladesh time, use `TIMEZONE=Asia/Dhaka` in your .env file. This will display all dates and times in Bangladesh Standard Time (UTC+6).
+
+Common timezone options:
+
+- `Asia/Dhaka` - Bangladesh
+- `Asia/Kolkata` - India
+- `Asia/Tokyo` - Japan
+- `Europe/London` - UK
+- `America/New_York` - US Eastern
+- `America/Los_Angeles` - US Pacific
 
 ## License
 

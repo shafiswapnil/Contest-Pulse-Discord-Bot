@@ -1,6 +1,6 @@
 const schedule = require('node-schedule');
 const { fetchContests } = require('./contestService');
-const { createContestEmbed } = require('../utils/embedFormatter');
+const { createContestEmbed, formatDateInTimezone } = require('../utils/embedFormatter');
 const { Client, EmbedBuilder } = require('discord.js');
 
 // Track which contests have already had reminders sent
@@ -76,8 +76,11 @@ async function scheduleContestReminders(client) {
 function scheduleReminder(client, contest, reminderTime, timeText, contestId) {
   const channelId = process.env.DISCORD_CHANNEL_ID;
   const reminderDate = new Date(reminderTime);
+  const timezone = process.env.TIMEZONE || 'UTC';
   
-  console.log(`Scheduling ${timeText} reminder for "${contest.name}" at ${reminderDate.toLocaleString()}`);
+  // Format the reminder time for logging in the configured timezone
+  const formattedTime = formatDateInTimezone(reminderDate, 'datetime');
+  console.log(`Scheduling ${timeText} reminder for "${contest.name}" at ${formattedTime} (${timezone})`);
   
   // Create a job that runs at the specified time
   schedule.scheduleJob(reminderDate, async function() {
@@ -150,14 +153,21 @@ async function sendTodayContestReminders(client) {
     const channelId = process.env.DISCORD_CHANNEL_ID;
     const now = Date.now();
     
-    // Get contests happening today
+    // Get contests happening today based on the configured timezone
+    const timezone = process.env.TIMEZONE || 'UTC';
+    const todayStart = new Date();
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    
+    // Format dates based on the configured timezone for comparison
     const todayContests = contests.filter(contest => {
       const contestDate = new Date(contest.startTimeMs);
-      const today = new Date();
       
-      return contestDate.getDate() === today.getDate() &&
-             contestDate.getMonth() === today.getMonth() &&
-             contestDate.getFullYear() === today.getFullYear();
+      // Create dates in the configured timezone for comparison
+      const contestDateString = formatDateInTimezone(contestDate, 'date');
+      const todayDateString = formatDateInTimezone(todayStart, 'date');
+      
+      return contestDateString === todayDateString;
     });
     
     // Only send reminders for contests at least 6 hours away
@@ -203,15 +213,20 @@ async function checkTomorrowContests(client) {
     const contests = await fetchContests();
     const channelId = process.env.DISCORD_CHANNEL_ID;
     
-    // Get contests happening tomorrow
+    // Get contests happening tomorrow based on the configured timezone
+    const timezone = process.env.TIMEZONE || 'UTC';
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    // Format tomorrow's date for comparison
+    const tomorrowDateString = formatDateInTimezone(tomorrow, 'date');
+    
+    // Filter contests happening tomorrow
     const tomorrowContests = contests.filter(contest => {
       const contestDate = new Date(contest.startTimeMs);
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
+      const contestDateString = formatDateInTimezone(contestDate, 'date');
       
-      return contestDate.getDate() === tomorrow.getDate() &&
-             contestDate.getMonth() === tomorrow.getMonth() &&
-             contestDate.getFullYear() === tomorrow.getFullYear();
+      return contestDateString === tomorrowDateString;
     });
     
     if (tomorrowContests.length === 0) {
