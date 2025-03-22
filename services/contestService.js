@@ -61,29 +61,46 @@ async function fetchCodeforcesContests() {
 }
 
 /**
- * Fetches upcoming contests from AtCoder API
+ * Sleep function for rate limiting
+ * @param {number} ms - Time to sleep in milliseconds
+ * @returns {Promise} Promise that resolves after the specified time
+ */
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Fetches upcoming contests from AtCoder Problems API (unofficial)
+ * Uses the API provided by kenkoooo's AtCoder Problems project
+ * @see https://github.com/kenkoooo/AtCoderProblems/blob/master/doc/api.md
  * @returns {Promise<Array>} Array of formatted contest objects
  */
 async function fetchAtCoderContests() {
   try {
-    // Using an unofficial API to fetch AtCoder contests
-    let url = 'https://kenkoooo.com/atcoder/resources/contests.json';
-    let headers = {};
+    // Using the unofficial AtCoder Problems API by kenkoooo
+    // As per API guidelines, we should not hit the API too frequently
+    console.log('Fetching contests from AtCoder Problems API...');
     
-    // Use API key if provided
-    const apiKey = process.env.ATCODER_API_KEY;
-    if (apiKey) {
-      console.log('Using AtCoder API credentials');
-      headers = {
-        'Authorization': `Bearer ${apiKey}`
-      };
+    const url = 'https://kenkoooo.com/atcoder/resources/contests.json';
+    
+    // Respect API rate limiting guidelines (sleep at least 1 second between accesses)
+    // Adding this sleep even though we're only making one request to be respectful of the API
+    await sleep(1000);
+    
+    const response = await axios.get(url, { 
+      timeout: 10000,  // 10 second timeout
+      headers: {
+        'User-Agent': 'Discord Contest Bot - Respecting API Guidelines'
+      }
+    });
+    
+    if (!Array.isArray(response.data)) {
+      console.error('AtCoder API returned invalid data format');
+      return [];
     }
-    
-    const response = await axios.get(url, { headers });
     
     const now = Date.now();
     // Filter for upcoming contests only
     const upcomingContests = response.data.filter(contest => {
+      // The API provides start_time and end_time as ISO 8601 strings
       const startTimeMs = new Date(contest.start_time).getTime();
       return startTimeMs > now;
     });
