@@ -212,9 +212,12 @@ Once running, the bot operates on these schedules:
    - Include formatted contest information with correct time in your timezone
 
 3. **On-Demand Commands**: You can also interact with the bot using commands:
-   - `!contests` - Shows all upcoming contests
+   - `!contests` - Shows all upcoming contests in the next 7 days
    - `!today` - Shows contests happening today
    - `!tomorrow` - Shows contests happening tomorrow
+   - `!atcoder` - Shows upcoming AtCoder contests looking ahead 60 days
+   - `!setup-reminders` - Manually set up contest reminders
+   - `!health` - Check the bot's connection status to various APIs
    - `!help` - Shows available commands
 
 ### What to Expect
