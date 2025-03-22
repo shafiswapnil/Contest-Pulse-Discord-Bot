@@ -5,6 +5,13 @@
 const axios = require('axios');
 
 /**
+ * Sleep function for rate limiting
+ * @param {number} ms - Time to sleep in milliseconds
+ * @returns {Promise} Promise that resolves after the specified time
+ */
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
  * Checks if Codeforces API is reachable
  * @returns {Promise<boolean>} True if API is reachable
  */
@@ -19,15 +26,25 @@ async function checkCodeforcesAPI() {
 }
 
 /**
- * Checks if AtCoder API is reachable
+ * Checks if AtCoder Problems API is reachable
+ * Uses the unofficial API provided by kenkoooo
+ * @see https://github.com/kenkoooo/AtCoderProblems/blob/master/doc/api.md
  * @returns {Promise<boolean>} True if API is reachable
  */
 async function checkAtCoderAPI() {
   try {
-    const response = await axios.get('https://kenkoooo.com/atcoder/resources/contests.json', { timeout: 5000 });
+    // Respect API rate limiting guidelines (sleep before request)
+    await sleep(1000);
+
+    const response = await axios.get('https://kenkoooo.com/atcoder/resources/contests.json', { 
+      timeout: 5000,
+      headers: {
+        'User-Agent': 'Discord Contest Bot - Health Check'
+      }
+    });
     return Array.isArray(response.data);
   } catch (error) {
-    console.error('AtCoder API health check failed:', error.message);
+    console.error('AtCoder Problems API health check failed:', error.message);
     return false;
   }
 }
@@ -69,7 +86,7 @@ async function runHealthChecks() {
     services: {
       discord: discordCheck ? 'ok' : 'fail',
       codeforces: codeforcesCheck ? 'ok' : 'fail',
-      atcoder: atcoderCheck ? 'ok' : 'fail'
+      atcoder_problems: atcoderCheck ? 'ok' : 'fail'
     },
     timestamp: new Date().toISOString()
   };
