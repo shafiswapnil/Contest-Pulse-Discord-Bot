@@ -11,7 +11,7 @@ A Discord bot that fetches upcoming contest information from Codeforces and AtCo
 - Manual checking via commands
 - Optimized for Railway deployment with Railpack
 - Health monitoring for all connected services
-- Support for multiple contest data sources including Clist.by v4 API
+- Support for multiple contest data sources including Clist.by API
 
 ## File Structure and Purpose
 
@@ -242,7 +242,7 @@ To check the health of your bot:
 - **Codeforces API**: Uses the official public API (https://codeforces.com/api/contest.list). This API is publicly accessible and doesn't require authentication. While the bot includes support for API credentials, they're not currently used.
 
 - **AtCoder API**: AtCoder doesn't provide an official API. The bot uses two alternatives:
-  1. **Primary: Clist.by API v4** - A comprehensive contest aggregator that provides reliable AtCoder contest data (https://clist.by/)
+  1. **Primary: Clist.by API** - A comprehensive contest aggregator that provides reliable AtCoder contest data (https://clist.by/)
   2. **Fallback: AtCoder Problems API** - An unofficial API maintained by kenkoooo (https://github.com/kenkoooo/AtCoderProblems/blob/master/doc/api.md)
 
 For the most reliable AtCoder contest information, it's recommended to set up Clist.by credentials.

@@ -26,7 +26,7 @@ async function checkCodeforcesAPI() {
 }
 
 /**
- * Checks if Clist.by API v4 is reachable and credentials are valid
+ * Checks if Clist.by API is reachable and credentials are valid
  * @returns {Promise<boolean>} True if API is reachable and credentials are valid
  */
 async function checkClistAPI() {
@@ -42,33 +42,45 @@ async function checkClistAPI() {
       return false;
     }
     
-    const url = 'https://clist.by/api/v4/contests/';
+    const url = 'https://clist.by/api/v1/contest/';
     const params = {
-      username: username,
-      api_key: apiKey,
       limit: 1 // Just get one contest to verify the API is working
     };
     
-    const response = await axios.get(url, { params, timeout: 5000 });
+    // Set up authorization header based on the documentation
+    const headers = {
+      'Authorization': `ApiKey ${username}:${apiKey}`,
+      'User-Agent': 'Discord Contest Bot'
+    };
     
-    // Check for valid response structure (handle different possible v4 formats)
-    if (response.status === 200) {
-      // Check for various possible response formats
-      if (response.data && response.data.objects && Array.isArray(response.data.objects)) {
-        return true;
-      }
-      if (response.data && response.data.results && Array.isArray(response.data.results)) {
-        return true;
-      }
-      if (response.data && Array.isArray(response.data)) {
-        return true;
-      }
+    console.log('Running Clist.by API health check...');
+    
+    // Increase timeout to 15 seconds as Clist.by API can be slow
+    const response = await axios.get(url, { 
+      params, 
+      headers, 
+      timeout: 15000 // Increased from 5000ms to 15000ms (15 seconds)
+    });
+    
+    // Check for valid response structure
+    const isValid = response.status === 200 && 
+                    response.data && 
+                    response.data.objects && 
+                    Array.isArray(response.data.objects);
+                    
+    if (isValid) {
+      console.log('Clist.by API health check passed');
+    } else {
+      console.error('Clist.by API returned unexpected data format:', response.data);
     }
     
-    console.error('Clist.by API v4 returned unexpected data format:', response.data);
-    return false;
+    return isValid;
   } catch (error) {
-    console.error('Clist.by API v4 health check failed:', error.message);
+    const errorMsg = error.response 
+      ? `Status: ${error.response.status}, ${error.response.statusText}` 
+      : error.message;
+      
+    console.error(`Clist.by API health check failed: ${errorMsg}`);
     return false;
   }
 }

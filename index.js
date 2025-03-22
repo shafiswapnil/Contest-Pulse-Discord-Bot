@@ -106,7 +106,7 @@ client.on('messageCreate', async (message) => {
         { name: 'Codeforces API', value: result.services.codeforces, inline: true },
         { name: 'AtCoder Sources', value: result.services.atcoder_problems === 'ok' || result.services.clist === 'ok' ? 'ok' : 'fail', inline: true },
         { name: '- AtCoder Problems API', value: result.services.atcoder_problems, inline: true },
-        { name: '- Clist.by API v4', value: result.services.clist, inline: true }
+        { name: '- Clist.by API', value: result.services.clist, inline: true }
       )
       .setTimestamp();
     
