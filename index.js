@@ -4,7 +4,8 @@ const schedule = require('node-schedule');
 const { fetchContests } = require('./services/contestService');
 const express = require('express');
 const { runHealthChecks } = require('./utils/healthCheck');
-const { createContestEmbed } = require('./utils/embedFormatter');
+const { createContestEmbed, createContestsEmbed } = require('./utils/embedFormatter');
+const { scheduleContestReminders, sendTodayContestReminders, checkTomorrowContests } = require('./services/reminderService');
 
 // Create Express server for health checks
 const app = express();
@@ -20,77 +21,75 @@ const client = new Client({
 });
 
 // Bot ready event
-client.once('ready', () => {
-  console.log(`Logged in as ${client.user.tag}`);
+client.once('ready', async () => {
+  console.log(`Logged in as ${client.user.tag}!`);
   
-  // Get schedule from env or use default (daily at 12:00 UTC)
-  const cronSchedule = process.env.CONTEST_CHECK_SCHEDULE || '0 12 * * *';
-  console.log(`Contest check scheduled with cron: ${cronSchedule}`);
+  // Set up health check server
+  setupHealthServer();
   
-  // Schedule contest checks based on configuration
-  schedule.scheduleJob(cronSchedule, async () => {
-    await checkAndAnnounceContests();
+  // Schedule daily contest checking at specified time
+  const checkSchedule = process.env.CONTEST_CHECK_SCHEDULE || '0 12 * * *'; // Default: daily at 12:00 UTC
+  console.log(`Scheduling daily contest check at cron schedule: ${checkSchedule}`);
+  
+  // Initial setup of reminders
+  await scheduleContestReminders(client);
+  
+  // Schedule daily refresh of reminders
+  schedule.scheduleJob(checkSchedule, async () => {
+    console.log('Running scheduled contest check...');
+    await scheduleContestReminders(client);
+    await checkTomorrowContests(client);
   });
   
-  // Run initial health check
-  runHealthChecks().then(result => {
-    console.log('Health check result:', result);
-  });
-  
-  console.log('Contest checking scheduler initialized');
+  console.log('Bot setup complete!');
 });
 
-// Function to check contests and send announcements
-async function checkAndAnnounceContests() {
-  try {
-    const channelId = process.env.DISCORD_CHANNEL_ID;
-    const channel = client.channels.cache.get(channelId);
-    
-    if (!channel) {
-      console.error(`Channel with ID ${channelId} not found`);
-      return;
-    }
-    
-    console.log('Fetching upcoming contests...');
-    const contests = await fetchContests();
-    
-    if (contests.length === 0) {
-      console.log('No upcoming contests found within the next 7 days');
-      return;
-    }
-    
-    console.log(`Found ${contests.length} upcoming contests`);
-    
-    // Get the role mention string if role ID is provided
-    const roleId = process.env.CONTEST_ROLE_ID;
-    const roleMention = roleId ? `<@&${roleId}>` : '';
-    
-    // Mention the role first, if applicable
-    if (roleMention) {
-      await channel.send(roleMention + ' New contest alert!');
-    }
-    
-    // Send announcements for each contest using embeds
-    for (const contest of contests) {
-      const embed = createContestEmbed(contest);
-      
-      await channel.send({ embeds: [embed] });
-      console.log(`Sent announcement for ${contest.name}`);
-      
-      // Add small delay between messages to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-  } catch (error) {
-    console.error('Error in checkAndAnnounceContests:', error);
-  }
-}
-
-// Add a command handler for manual contest check
-client.on('messageCreate', async (message) => {
-  // Only respond to messages from guild members with the specific commands
+// Message handling
+client.on('messageCreate', async message => {
+  // Ignore messages from the bot
+  if (message.author.bot) return;
+  
+  // Manual contest check command
   if (message.content === '!contests') {
-    await message.channel.send('Checking for upcoming contests...');
-    await checkAndAnnounceContests();
+    try {
+      await message.channel.send('Checking for upcoming contests...');
+      
+      const contests = await fetchContests();
+      
+      if (contests.length === 0) {
+        await message.channel.send('No upcoming contests found in the next few days.');
+        return;
+      }
+      
+      const embed = createContestsEmbed(contests);
+      await message.channel.send({ embeds: [embed] });
+    } catch (error) {
+      console.error('Error fetching contests:', error);
+      await message.channel.send('Error fetching contest information. Please try again later.');
+    }
+  }
+  
+  // Check for contests tomorrow
+  if (message.content === '!tomorrow') {
+    message.channel.send('Checking for contests tomorrow...');
+    const hasContests = await checkTomorrowContests(client);
+    
+    if (!hasContests) {
+      message.channel.send('No contests scheduled for tomorrow.');
+    }
+  }
+  
+  // Check for contests today
+  if (message.content === '!today') {
+    message.channel.send('Checking for contests today...');
+    await sendTodayContestReminders(client);
+  }
+  
+  // Manual reminder setup
+  if (message.content === '!setup-reminders') {
+    message.channel.send('Setting up contest reminders...');
+    await scheduleContestReminders(client);
+    message.channel.send('Contest reminders have been set up. You will receive notifications 1 day, 6 hours, and 30 minutes before each contest.');
   }
   
   // Health check command
@@ -117,28 +116,35 @@ client.on('messageCreate', async (message) => {
   if (message.content === '!help') {
     const helpEmbed = new EmbedBuilder()
       .setTitle('Contest Bot Commands')
-      .setColor(0x1890FF)
-      .setDescription('Here are the available commands for the Contest Notification Bot:')
+      .setColor(0x00AE86)
+      .setDescription('Here are the commands you can use:')
       .addFields(
-        { name: '!contests', value: 'Check for upcoming contests in the next 7 days', inline: false },
-        { name: '!health', value: 'Check the bot\'s connection status to various services', inline: false },
+        { name: '!contests', value: 'Show all upcoming contests', inline: false },
+        { name: '!today', value: 'Check if there are any contests today', inline: false },
+        { name: '!tomorrow', value: 'Check if there are any contests tomorrow', inline: false },
+        { name: '!setup-reminders', value: 'Manually set up contest reminders', inline: false },
+        { name: '!health', value: 'Check the bot\'s connection status', inline: false },
         { name: '!help', value: 'Show this help message', inline: false }
-      );
-    
+      )
+      .setFooter({ text: 'Contest reminders will be sent automatically at 1 day, 6 hours, and 30 minutes before each contest.' });
+      
     await message.channel.send({ embeds: [helpEmbed] });
   }
 });
 
 // Express routes
 app.get('/', (req, res) => {
-  res.send('Discord Codeforces & AtCoder Contest Bot is running!');
+  res.send('Contest Bot is running!');
 });
 
 // Health check endpoint
 app.get('/health', async (req, res) => {
-  const healthResult = await runHealthChecks();
-  res.status(healthResult.status === 'healthy' ? 200 : 500)
-     .json(healthResult);
+  try {
+    const result = await runHealthChecks();
+    res.status(result.status === 'healthy' ? 200 : 503).json(result);
+  } catch (error) {
+    res.status(500).json({ status: 'error', error: error.message });
+  }
 });
 
 // Start Express server
@@ -159,4 +165,27 @@ process.on('unhandledRejection', error => {
 console.log('Environment:', {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: PORT
-}); 
+});
+
+// Set up health check server
+function setupHealthServer() {
+  const app = express();
+  const PORT = process.env.PORT || 3000;
+  
+  app.get('/', (req, res) => {
+    res.send('Contest Bot is running!');
+  });
+  
+  app.get('/health', async (req, res) => {
+    try {
+      const result = await runHealthChecks();
+      res.status(result.status === 'healthy' ? 200 : 503).json(result);
+    } catch (error) {
+      res.status(500).json({ status: 'error', error: error.message });
+    }
+  });
+  
+  app.listen(PORT, () => {
+    console.log(`Health check server running on port ${PORT}`);
+  });
+} 
