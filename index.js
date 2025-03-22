@@ -1,10 +1,10 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const schedule = require('node-schedule');
-const { fetchContests } = require('./services/contestService');
+const { fetchContests, fetchAtCoderContests } = require('./services/contestService');
 const express = require('express');
 const { runHealthChecks } = require('./utils/healthCheck');
-const { createContestEmbed, createContestsEmbed } = require('./utils/embedFormatter');
+const { createContestEmbed, createContestsEmbed, formatDateInTimezone } = require('./utils/embedFormatter');
 const { scheduleContestReminders, sendTodayContestReminders, checkTomorrowContests } = require('./services/reminderService');
 
 // Create Express server for health checks
@@ -49,23 +49,102 @@ client.on('messageCreate', async message => {
   // Ignore messages from the bot
   if (message.author.bot) return;
   
-  // Manual contest check command
-  if (message.content === '!contests') {
+  // Handle contest command
+  if (message.content.toLowerCase() === '!contests') {
+    message.channel.send('Checking for upcoming contests...');
     try {
-      await message.channel.send('Checking for upcoming contests...');
-      
       const contests = await fetchContests();
       
-      if (contests.length === 0) {
-        await message.channel.send('No upcoming contests found in the next few days.');
+      // Debug info to check contest sources
+      console.log(`Total contests found: ${contests.length}`);
+      const atcoderContests = contests.filter(c => c.platform === 'AtCoder');
+      const codeforcesContests = contests.filter(c => c.platform === 'Codeforces');
+      console.log(`AtCoder contests: ${atcoderContests.length}`);
+      console.log(`Codeforces contests: ${codeforcesContests.length}`);
+      
+      if (atcoderContests.length > 0) {
+        console.log('AtCoder contests found:');
+        atcoderContests.forEach(c => console.log(` - ${c.name} (${c.date}, ${c.startTime})`));
+      } else {
+        console.log('No AtCoder contests found in the next 7 days');
+      }
+      
+      // Continue with normal contest display
+      const embed = createContestsEmbed(contests);
+      message.channel.send({ embeds: [embed] });
+    } catch (error) {
+      console.error('Error fetching contests:', error);
+      message.channel.send('Error fetching contests. Please try again later.');
+    }
+  }
+  
+  // Add a special command for AtCoder contests (looking ahead further)
+  if (message.content.toLowerCase() === '!atcoder') {
+    message.channel.send('Checking for upcoming AtCoder contests...');
+    try {
+      // Temporarily modify the environment variable for a longer lookout
+      const originalDaysAhead = process.env.CONTEST_DAYS_AHEAD;
+      process.env.CONTEST_DAYS_AHEAD = '60'; // Look up to 60 days ahead
+      
+      // Only fetch AtCoder contests
+      const atcoderContests = await fetchAtCoderContests();
+      
+      // Restore original setting
+      process.env.CONTEST_DAYS_AHEAD = originalDaysAhead;
+      
+      console.log(`Found ${atcoderContests.length} AtCoder contests within the next 60 days`);
+      
+      if (atcoderContests.length === 0) {
+        message.channel.send('No upcoming AtCoder contests found in the next 60 days.');
         return;
       }
       
-      const embed = createContestsEmbed(contests);
-      await message.channel.send({ embeds: [embed] });
+      // Create a custom embed for AtCoder contests
+      const embed = new EmbedBuilder()
+        .setTitle('Upcoming AtCoder Contests')
+        .setColor(0x00BFFF) // Light Blue for AtCoder
+        .setTimestamp();
+      
+      // Group contests by date
+      const contestsByDate = {};
+      
+      atcoderContests.forEach(contest => {
+        const contestDate = new Date(contest.startTimeMs);
+        const dateKey = formatDateInTimezone(contestDate, 'date');
+        
+        if (!contestsByDate[dateKey]) {
+          contestsByDate[dateKey] = [];
+        }
+        contestsByDate[dateKey].push(contest);
+      });
+      
+      // Add each date as a field
+      for (const date in contestsByDate) {
+        let contestsList = '';
+        
+        contestsByDate[date].forEach(contest => {
+          const startDate = new Date(contest.startTimeMs);
+          const endDate = new Date(contest.endTimeMs || startDate.getTime() + 2 * 60 * 60 * 1000);
+          
+          const startTimeFormatted = formatDateInTimezone(startDate, 'time');
+          const endTimeFormatted = formatDateInTimezone(endDate, 'time');
+          
+          contestsList += `**${contest.name}**\n`;
+          contestsList += `Time: ${startTimeFormatted} to ${endTimeFormatted}\n`;
+          contestsList += `Link: [Contest Page](${contest.url})\n\n`;
+        });
+        
+        embed.addFields({ name: date, value: contestsList });
+      }
+      
+      embed.setFooter({ 
+        text: `All times are shown in ${process.env.TIMEZONE || 'UTC'} timezone`
+      });
+      
+      message.channel.send({ embeds: [embed] });
     } catch (error) {
-      console.error('Error fetching contests:', error);
-      await message.channel.send('Error fetching contest information. Please try again later.');
+      console.error('Error fetching AtCoder contests:', error);
+      message.channel.send('Error fetching AtCoder contest information. Please try again later.');
     }
   }
   
@@ -113,22 +192,23 @@ client.on('messageCreate', async message => {
   }
   
   // Help command
-  if (message.content === '!help') {
-    const helpEmbed = new EmbedBuilder()
+  if (message.content.toLowerCase() === '!help') {
+    const embed = new EmbedBuilder()
       .setTitle('Contest Bot Commands')
       .setColor(0x00AE86)
-      .setDescription('Here are the commands you can use:')
+      .setDescription('Here are the available commands:')
       .addFields(
-        { name: '!contests', value: 'Show all upcoming contests', inline: false },
-        { name: '!today', value: 'Check if there are any contests today', inline: false },
-        { name: '!tomorrow', value: 'Check if there are any contests tomorrow', inline: false },
+        { name: '!contests', value: 'Show all upcoming contests for the next 7 days', inline: false },
+        { name: '!today', value: 'Show contests happening today', inline: false },
+        { name: '!tomorrow', value: 'Show contests happening tomorrow', inline: false },
+        { name: '!atcoder', value: 'Show all upcoming AtCoder contests for the next 60 days', inline: false },
         { name: '!setup-reminders', value: 'Manually set up contest reminders', inline: false },
-        { name: '!health', value: 'Check the bot\'s connection status', inline: false },
+        { name: '!health', value: 'Check the bot\'s connection to APIs', inline: false },
         { name: '!help', value: 'Show this help message', inline: false }
       )
-      .setFooter({ text: 'Contest reminders will be sent automatically at 1 day, 6 hours, and 30 minutes before each contest.' });
-      
-    await message.channel.send({ embeds: [helpEmbed] });
+      .setFooter({ text: 'Contest Bot - Get reminders for upcoming programming contests' });
+    
+    message.channel.send({ embeds: [embed] });
   }
 });
 
