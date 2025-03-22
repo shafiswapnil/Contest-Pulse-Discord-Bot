@@ -8,16 +8,18 @@ A Discord bot that provides timely reminders for upcoming Codeforces and AtCoder
 - **Individual Contest Notifications**: Each contest gets its own message with formatted details, avoiding cluttered lists
 - **Customizable Commands**: Check for contests today, tomorrow, or get a full list
 - **Smart Filtering**: Only sends reminders for contests that are at least 6 hours away when checking today's contests
-- **Multiple Data Sources**: Uses both Codeforces API and Clist.by for reliable contest information
+- **Multiple Data Sources**: Uses Codeforces API and multiple sources for AtCoder (Clist.by, direct website scraping, and AtCoder Problems API)
 - **Localized Time Display**: Shows contest times in your preferred timezone (e.g., Bangladesh time)
-- **Optimized for Railway Deployment**: Includes health checks and monitoring
+- **Optimized for Railway Deployment**: Includes health checks and monitoring with automatic port selection
 - **Automatic Scheduling**: Refreshes contest information daily
+- **Resilient Architecture**: Multiple fallback methods for fetching contest data
 
 ## Bot Commands
 
-- `!contests` - Show a list of all upcoming contests
+- `!contests` - Show a list of all upcoming contests (next 7 days by default)
 - `!today` - Check if there are any contests happening today
 - `!tomorrow` - Check if there are any contests scheduled for tomorrow
+- `!atcoder` - Show upcoming AtCoder contests specifically (looking ahead 60 days)
 - `!setup-reminders` - Manually set up contest reminders
 - `!health` - Check the bot's connection status to various services
 - `!help` - Show a list of available commands
@@ -26,11 +28,34 @@ A Discord bot that provides timely reminders for upcoming Codeforces and AtCoder
 
 The bot fetches contest information from multiple sources and schedules automated reminders:
 
-1. **Contest Fetch**: Retrieves data from Codeforces API and Clist.by (for AtCoder)
-2. **Reminder Scheduling**: Sets up scheduled reminders for each contest at specified intervals
-3. **Targeted Notifications**: Sends individual contest announcements rather than cluttered lists
-4. **Daily Refresh**: Updates contest information and reminders daily
-5. **Timezone Support**: Displays all times in your configured timezone (e.g., Asia/Dhaka for Bangladesh)
+1. **Contest Fetch**:
+   - Retrieves Codeforces data from the public Codeforces API
+   - Fetches AtCoder contests using multiple methods:
+     - Clist.by API (primary method)
+     - Direct AtCoder website scraping (backup)
+     - AtCoder Problems API (fallback)
+2. **Smart Timeframes**: Looks up to 45 days ahead for AtCoder contests while keeping the default 7-day window for Codeforces
+3. **Reminder Scheduling**: Sets up scheduled reminders for each contest at specified intervals
+4. **Targeted Notifications**: Sends individual contest announcements rather than cluttered lists
+5. **Daily Refresh**: Updates contest information and reminders daily
+6. **Timezone Support**: Displays all times in your configured timezone (e.g., Asia/Dhaka for Bangladesh)
+
+## File Structure and Purpose
+
+- `index.js` - Main entry point with Discord bot setup and command handling
+- `services/contestService.js` - Contest data fetching from various platforms with multi-source fallback
+- `services/reminderService.js` - Handles scheduling and sending timed reminders
+- `utils/embedFormatter.js` - Formats contest data into Discord embedded messages with timezone support
+- `utils/healthCheck.js` - Provides functions to check API connectivity
+
+## Health Check and Port Management
+
+The bot includes an HTTP server for health checks that:
+
+- Starts on port 3000 by default
+- Automatically finds the next available port if 3000 is busy
+- Provides `/health` endpoint to check API connections
+- Reports the status of Discord, Codeforces, and AtCoder connections
 
 ## Reminder System
 
@@ -45,14 +70,6 @@ Each reminder includes:
 - Contest name and platform (Codeforces or AtCoder)
 - Date and time information in your local timezone
 - Link to the contest page
-
-## File Structure and Purpose
-
-- `index.js` - Main entry point with Discord bot setup and command handling
-- `services/contestService.js` - Contest data fetching from various platforms
-- `services/reminderService.js` - Handles scheduling and sending timed reminders
-- `utils/embedFormatter.js` - Formats contest data into Discord embedded messages with timezone support
-- `utils/healthCheck.js` - Provides functions to check API connectivity
 
 ## Setup
 
@@ -130,6 +147,18 @@ npm run dev
 
 \*Required for reliable AtCoder contest information. The bot will fall back to AtCoder Problems API if not provided.
 
+## API Notes
+
+- **Codeforces API**: The bot uses the public Codeforces API which doesn't require authentication. API keys in the configuration are included for future compatibility but are not currently used.
+
+- **AtCoder Data Sources**: The bot uses three methods to fetch AtCoder contests, in order of priority:
+
+  1. **Clist.by API**: Requires credentials and provides comprehensive contest data
+  2. **Direct AtCoder Website**: Falls back to scraping the AtCoder website if Clist.by fails
+  3. **AtCoder Problems API**: Used as a last resort if other methods fail
+
+- **Extended Timeframe for AtCoder**: The bot looks up to 45 days ahead for AtCoder contests while respecting the standard timeframe (default: 7 days) for display and notifications.
+
 ## Timezone Configuration
 
 For Bangladesh time, use `TIMEZONE=Asia/Dhaka` in your .env file. This will display all dates and times in Bangladesh Standard Time (UTC+6).
@@ -158,7 +187,7 @@ When you first start the bot, the following sequence of events occurs:
 3. **Daily Contest Check Schedule**: The bot sets up a daily schedule to check for new contests, typically at 12:00 UTC (configurable via `CONTEST_CHECK_SCHEDULE`).
 4. **Initial Contest Fetch**: The bot immediately fetches upcoming contests from:
    - Codeforces API (public, no authentication needed)
-   - AtCoder contests via Clist.by API (using your Clist.by credentials)
+   - AtCoder contests via multiple sources (Clist.by, direct website, AtCoder Problems API)
 5. **Reminder Scheduling**: For each upcoming contest found, the bot schedules reminder messages at:
    - 1 day before the contest
    - 6 hours before the contest
@@ -208,3 +237,10 @@ If you don't see any messages:
 2. Verify your `DISCORD_CHANNEL_ID` is set correctly
 3. Use `!health` command to check API connections
 4. Check your console logs for any errors
+
+If you don't see AtCoder contests:
+
+1. Try the `!atcoder` command which looks ahead 60 days specifically for AtCoder contests
+2. Ensure your Clist.by credentials are correct in the .env file
+3. Check if there are any upcoming AtCoder contests on the [AtCoder website](https://atcoder.jp/contests/)
+4. Verify your internet connection can reach atcoder.jp
