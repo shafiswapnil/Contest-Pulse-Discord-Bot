@@ -2,6 +2,7 @@ const schedule = require('node-schedule');
 const { fetchContests } = require('./contestService');
 const { createContestEmbed, formatDateInTimezone } = require('../utils/embedFormatter');
 const { Client, EmbedBuilder } = require('discord.js');
+const contestService = require('./contestService');
 
 // Track which contests have already had reminders sent
 const sentReminders = {
@@ -12,56 +13,30 @@ const sentReminders = {
 
 /**
  * Schedules reminders for upcoming contests
- * @param {Client} client - Discord.js client
+ * @param {Discord.Client} client - Discord client
  */
 async function scheduleContestReminders(client) {
   try {
-    console.log('Scheduling contest reminders...');
+    // Get the number of days to look ahead from environment variables
+    const daysAhead = parseInt(process.env.CONTEST_DAYS_AHEAD || '7', 10);
     
-    // Clear any existing scheduled jobs
-    Object.values(schedule.scheduledJobs).forEach(job => job.cancel());
+    console.log(`Setting up contest reminders looking ahead ${daysAhead} days...`);
     
-    // Reset reminder tracking
-    sentReminders.day.clear();
-    sentReminders.hours.clear();
-    sentReminders.minutes.clear();
+    // Fetch contest data
+    const contests = await contestService.fetchContests(daysAhead);
     
-    // Fetch upcoming contests
-    const contests = await fetchContests();
-    if (!contests || contests.length === 0) {
+    // Schedule reminders for the fetched contests
+    if (contests.length > 0) {
+      scheduleReminders(client, contests);
+      console.log(`Scheduled reminders for ${contests.length} upcoming contests`);
+    } else {
       console.log('No upcoming contests found to schedule reminders for');
-      return;
     }
     
-    console.log(`Scheduling reminders for ${contests.length} contests`);
-    
-    const now = Date.now();
-    
-    // Schedule reminders for each contest
-    contests.forEach(contest => {
-      const contestStartTime = contest.startTimeMs;
-      const contestId = `${contest.platform}-${contest.name}-${contestStartTime}`;
-      
-      // Schedule 1 day reminder
-      const oneDayBefore = contestStartTime - (24 * 60 * 60 * 1000);
-      if (oneDayBefore > now) {
-        scheduleReminder(client, contest, oneDayBefore, '1 day', contestId);
-      }
-      
-      // Schedule 6 hour reminder
-      const sixHoursBefore = contestStartTime - (6 * 60 * 60 * 1000);
-      if (sixHoursBefore > now) {
-        scheduleReminder(client, contest, sixHoursBefore, '6 hours', contestId);
-      }
-      
-      // Schedule 30 minute reminder
-      const thirtyMinsBefore = contestStartTime - (30 * 60 * 1000);
-      if (thirtyMinsBefore > now) {
-        scheduleReminder(client, contest, thirtyMinsBefore, '30 minutes', contestId);
-      }
-    });
+    return contests;
   } catch (error) {
-    console.error('Error scheduling contest reminders:', error);
+    console.error('Failed to schedule contest reminders:', error.message);
+    return [];
   }
 }
 
@@ -145,126 +120,260 @@ function scheduleReminder(client, contest, reminderTime, timeText, contestId) {
 
 /**
  * Sends reminders for contests happening today
- * @param {Client} client - Discord.js client
- * @param {Channel} responseChannel - Optional channel to send response to. If not provided, uses DISCORD_CHANNEL_ID
+ * @param {Discord.Client} client - Discord client
+ * @param {Discord.TextChannel} channel - Channel to send notifications to
+ * @returns {Promise<boolean>} True if any contests were found for today
  */
-async function sendTodayContestReminders(client, responseChannel = null) {
+async function sendTodayContestReminders(client, channel) {
   try {
-    const contests = await fetchContests();
-    const defaultChannelId = process.env.DISCORD_CHANNEL_ID;
-    const now = Date.now();
+    console.log('Checking for contests happening today...');
     
-    // Get contests happening today based on the configured timezone
+    // We only look 2 days ahead for today's contests
+    const contests = await contestService.fetchContests(2);
+    if (!contests || contests.length === 0) {
+      console.log('No upcoming contests found');
+      return false;
+    }
+    
+    // Get the current date in the configured timezone
     const timezone = process.env.TIMEZONE || 'UTC';
-    const todayStart = new Date();
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
+    const now = new Date();
+    const todayStr = formatDateInTimezone(now, 'date', timezone);
+    console.log(`Today's date in ${timezone}: ${todayStr}`);
     
-    // Format dates based on the configured timezone for comparison
-    const todayContests = contests.filter(contest => {
+    // Find contests happening today
+    let todayContests = contests.filter(contest => {
+      // Convert contest date to the configured timezone
       const contestDate = new Date(contest.startTimeMs);
+      const contestDateStr = formatDateInTimezone(contestDate, 'date', timezone);
       
-      // Create dates in the configured timezone for comparison
-      const contestDateString = formatDateInTimezone(contestDate, 'date');
-      const todayDateString = formatDateInTimezone(todayStart, 'date');
+      // Check if this contest is today
+      const isToday = contestDateStr === todayStr;
+      console.log(`Contest "${contest.name}" (${contest.platform}) date: ${contestDateStr}, compared to today (${todayStr}), isToday: ${isToday}`);
       
-      return contestDateString === todayDateString;
+      return isToday;
     });
     
-    // Only send reminders for contests at least 6 hours away
-    const contestsToRemind = todayContests.filter(contest => {
-      return contest.startTimeMs > now + (6 * 60 * 60 * 1000);
-    });
-    
-    // Use the provided response channel or fetch the default channel
-    const channel = responseChannel || await client.channels.fetch(defaultChannelId);
-    
-    if (!channel) {
-      console.error(`Could not find channel ${responseChannel ? 'provided' : `with ID ${defaultChannelId}`}`);
+    if (todayContests.length === 0) {
+      console.log('No contests happening today');
       return false;
     }
     
-    if (contestsToRemind.length === 0) {
-      console.log('No contests today that are at least 6 hours away');
-      await channel.send('No contests happening today (or contests are less than 6 hours away).');
-      return false;
-    }
+    console.log(`Found ${todayContests.length} contests happening today`);
     
-    for (const contest of contestsToRemind) {
-      const timeUntilStart = contest.startTimeMs - now;
-      const hoursUntilStart = Math.floor(timeUntilStart / (1000 * 60 * 60));
-      
-      const embed = createContestEmbed(contest, `Starts in ${hoursUntilStart} hours`);
-      
-      await channel.send({
-        content: `Today's contest:`,
-        embeds: [embed]
-      });
-    }
+    // Filter out contests that start too soon (less than 6 hours from now)
+    // to avoid cluttering the channel with reminders for contests that are about to start
+    const sixHoursInMs = 6 * 60 * 60 * 1000;
+    const minStartTime = Date.now() + sixHoursInMs;
     
-    return true;
+    // Keep contests that are at least 6 hours away
+    const filteredContests = todayContests.filter(contest => {
+      const isFarEnough = contest.startTimeMs >= minStartTime;
+      if (!isFarEnough) {
+        console.log(`Skipping reminder for contest "${contest.name}" as it starts in less than 6 hours`);
+      }
+      return isFarEnough;
+    });
+    
+    // Sort by start time
+    todayContests = todayContests.sort((a, b) => a.startTimeMs - b.startTimeMs);
+    
+    // Display all today's contests in the channel
+    console.log(`Today's contests (sorted):`);
+    todayContests.forEach(contest => {
+      console.log(`- ${contest.name} (${contest.platform}) at ${new Date(contest.startTimeMs).toLocaleString()}`);
+    });
+    
+    // Calculate time until contest starts for each contest
+    todayContests.forEach(contest => {
+      const timeUntilStart = contest.startTimeMs - Date.now();
+      
+      // Format the time until start
+      let timingMessage;
+      if (timeUntilStart <= 0) {
+        // Contest has already started
+        const minutesAgo = Math.floor((Date.now() - contest.startTimeMs) / (60 * 1000));
+        timingMessage = `Started ${minutesAgo} minute${minutesAgo === 1 ? '' : 's'} ago`;
+      } else {
+        // Contest will start in the future
+        const hoursUntil = Math.floor(timeUntilStart / (60 * 60 * 1000));
+        const minsUntil = Math.floor((timeUntilStart % (60 * 60 * 1000)) / (60 * 1000));
+        timingMessage = `Starts in ${hoursUntil}h ${minsUntil}m`;
+      }
+      
+      console.log(`Contest "${contest.name}" timing message: "${timingMessage}"`);
+      
+      // Send a notification for this contest
+      const embed = createContestEmbed(contest, `🔔 Today's Contest: ${timingMessage}`, 0x3498db);
+      channel.send({ embeds: [embed] });
+    });
+    
+    return todayContests.length > 0;
   } catch (error) {
-    console.error('Error sending today\'s contest reminders:', error);
+    console.error('Error checking today\'s contests:', error.message);
     return false;
   }
 }
 
 /**
- * Checks if there are any contests tomorrow and sends a notification
- * @param {Client} client - Discord.js client
- * @param {Channel} responseChannel - Optional channel to send response to. If not provided, uses DISCORD_CHANNEL_ID
- * @returns {Promise<boolean>} True if contests were found and notification sent
+ * Checks for contests happening tomorrow and sends notifications
+ * @param {Discord.Client} client - Discord client
+ * @param {Discord.TextChannel} channel - Channel to send notifications to
+ * @returns {Promise<boolean>} True if any contests were found for tomorrow
  */
-async function checkTomorrowContests(client, responseChannel = null) {
+async function checkTomorrowContests(client, channel) {
   try {
-    const contests = await fetchContests();
-    const defaultChannelId = process.env.DISCORD_CHANNEL_ID;
+    console.log('Checking for contests happening tomorrow...');
     
-    // Get contests happening tomorrow based on the configured timezone
+    // We need to look at least 2 days ahead to include tomorrow
+    const contests = await contestService.fetchContests(3);
+    if (!contests || contests.length === 0) {
+      console.log('No upcoming contests found');
+      return false;
+    }
+    
+    // Get tomorrow's date in the configured timezone
     const timezone = process.env.TIMEZONE || 'UTC';
-    const tomorrow = new Date();
+    const now = new Date();
+    const tomorrow = new Date(now);
     tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = formatDateInTimezone(tomorrow, 'date', timezone);
     
-    // Format tomorrow's date for comparison
-    const tomorrowDateString = formatDateInTimezone(tomorrow, 'date');
-    
-    // Filter contests happening tomorrow
+    // Find contests happening tomorrow
     const tomorrowContests = contests.filter(contest => {
+      // Convert contest date to the configured timezone
       const contestDate = new Date(contest.startTimeMs);
-      const contestDateString = formatDateInTimezone(contestDate, 'date');
+      const contestDateStr = formatDateInTimezone(contestDate, 'date', timezone);
       
-      return contestDateString === tomorrowDateString;
+      return contestDateStr === tomorrowStr;
     });
     
-    // Use the provided response channel or fetch the default channel
-    const channel = responseChannel || await client.channels.fetch(defaultChannelId);
-    
-    if (!channel) {
-      console.error(`Could not find channel ${responseChannel ? 'provided' : `with ID ${defaultChannelId}`}`);
-      return false;
-    }
-    
     if (tomorrowContests.length === 0) {
-      await channel.send('No contests scheduled for tomorrow.');
+      console.log('No contests happening tomorrow');
       return false;
     }
     
-    await channel.send(`There ${tomorrowContests.length === 1 ? 'is' : 'are'} ${tomorrowContests.length} contest${tomorrowContests.length === 1 ? '' : 's'} scheduled for tomorrow.`);
+    console.log(`Found ${tomorrowContests.length} contests happening tomorrow (${tomorrowStr})`);
     
+    // Sort by start time
+    tomorrowContests.sort((a, b) => a.startTimeMs - b.startTimeMs);
+    
+    // Send a summary message first
+    const contestNames = tomorrowContests.map(c => `${c.name} (${c.platform})`).join('\n• ');
+    const summaryEmbed = new EmbedBuilder()
+      .setColor(0x3498db) // Blue color
+      .setTitle(`📅 ${tomorrowContests.length} Contest${tomorrowContests.length > 1 ? 's' : ''} Tomorrow!`)
+      .setDescription(`Get ready for these contests tomorrow:\n\n• ${contestNames}`)
+      .setFooter({ text: `Tomorrow: ${tomorrowStr}` });
+    
+    await channel.send({ embeds: [summaryEmbed] });
+    
+    // Send individual contest details
     for (const contest of tomorrowContests) {
-      const embed = createContestEmbed(contest, 'Tomorrow');
+      const embed = createContestEmbed(contest, '📅 Contest Tomorrow', 0x3498db);
       await channel.send({ embeds: [embed] });
     }
     
     return true;
   } catch (error) {
-    console.error('Error checking tomorrow\'s contests:', error);
+    console.error('Error checking tomorrow\'s contests:', error.message);
     return false;
   }
+}
+
+/**
+ * Refreshes the contest data and reschedules reminders
+ * @param {Discord.Client} client - Discord client
+ */
+async function refreshContests(client) {
+  try {
+    console.log('Refreshing contest data...');
+    
+    // Clear all existing scheduled jobs
+    clearAllReminders();
+    
+    // Get the number of days to look ahead from environment variables
+    const daysAhead = parseInt(process.env.CONTEST_DAYS_AHEAD || '7', 10);
+    
+    // Fetch new contest data
+    const contests = await contestService.fetchContests(daysAhead);
+    
+    // Schedule reminders for the fetched contests
+    scheduleReminders(client, contests);
+    
+    // Check if there are any contests tomorrow and send a notification
+    const channelId = process.env.DISCORD_CHANNEL_ID;
+    const channel = client.channels.cache.get(channelId);
+    
+    if (channel) {
+      // We should check tomorrow's contests after refreshing the data
+      await checkTomorrowContests(client, channel);
+    }
+    
+    console.log('Contest data refreshed and reminders rescheduled');
+    return contests;
+  } catch (error) {
+    console.error('Error refreshing contest data:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Clears all scheduled reminders
+ */
+function clearAllReminders() {
+  console.log('Clearing all scheduled reminders');
+  Object.keys(schedule.scheduledJobs).forEach(jobName => {
+    schedule.scheduledJobs[jobName].cancel();
+  });
+  
+  // Reset reminder tracking
+  sentReminders.day.clear();
+  sentReminders.hours.clear();
+  sentReminders.minutes.clear();
+}
+
+/**
+ * Schedules reminders for all provided contests
+ * @param {Client} client - Discord.js client
+ * @param {Array} contests - Array of contest objects to schedule reminders for
+ */
+function scheduleReminders(client, contests) {
+  console.log(`Setting up reminders for ${contests.length} contests`);
+  
+  // Clear existing scheduled jobs first
+  clearAllReminders();
+  
+  const now = Date.now();
+  
+  // For each contest, schedule reminders at different time points
+  contests.forEach(contest => {
+    const contestStartTime = contest.startTimeMs;
+    const contestId = `${contest.platform}-${contest.name}-${contestStartTime}`;
+    
+    // Schedule 1 day reminder
+    const oneDayBefore = contestStartTime - (24 * 60 * 60 * 1000);
+    if (oneDayBefore > now) {
+      scheduleReminder(client, contest, oneDayBefore, '1 day', contestId);
+    }
+    
+    // Schedule 6 hour reminder
+    const sixHoursBefore = contestStartTime - (6 * 60 * 60 * 1000);
+    if (sixHoursBefore > now) {
+      scheduleReminder(client, contest, sixHoursBefore, '6 hours', contestId);
+    }
+    
+    // Schedule 30 minute reminder
+    const thirtyMinsBefore = contestStartTime - (30 * 60 * 1000);
+    if (thirtyMinsBefore > now) {
+      scheduleReminder(client, contest, thirtyMinsBefore, '30 minutes', contestId);
+    }
+  });
 }
 
 module.exports = {
   scheduleContestReminders,
   sendTodayContestReminders,
-  checkTomorrowContests
+  checkTomorrowContests,
+  refreshContests
 }; 

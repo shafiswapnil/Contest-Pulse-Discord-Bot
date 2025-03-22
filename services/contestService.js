@@ -4,63 +4,54 @@ const axios = require('axios');
  * Fetches upcoming contests from Codeforces API
  * @returns {Promise<Array>} Array of formatted contest objects
  */
-async function fetchCodeforcesContests() {
+async function fetchCodeforcesContests(startTime, endTime) {
   try {
-    let url = 'https://codeforces.com/api/contest.list';
+    console.log('Fetching Codeforces contests...');
     
-    // Check if API credentials are provided
-    const apiKey = process.env.CODEFORCES_API_KEY;
-    const apiSecret = process.env.CODEFORCES_API_SECRET;
+    // Fetching directly from Codeforces API
+    const response = await axios.get('https://codeforces.com/api/contest.list', {
+      timeout: 10000
+    });
     
-    // Only use credentials if both key and secret are provided and not empty placeholders
-    const useCredentials = 
-      apiKey && 
-      apiSecret && 
-      apiKey !== 'your_codeforces_api_key_here' &&
-      apiSecret !== 'your_codeforces_api_secret_here';
-    
-    let response;
-    if (useCredentials) {
-      console.log('Using Codeforces API credentials');
-      // Implement proper Codeforces authentication if needed in the future
-      // Currently not implementing full authentication as the public API works without it
+    if (response.data && response.data.status === 'OK') {
+      // Filter for only upcoming contests (those with negative relativeTimeSeconds)
+      const upcomingContests = response.data.result
+        .filter(contest => contest.phase === 'BEFORE')
+        .map(contest => {
+          // Calculate start and end times
+          const startTimeMs = (contest.startTimeSeconds * 1000);
+          const endTimeMs = startTimeMs + (contest.durationSeconds * 1000);
+          
+          const startDate = new Date(startTimeMs);
+          const endDate = new Date(endTimeMs);
+          
+          return {
+            platform: 'Codeforces',
+            name: contest.name,
+            date: startDate.toDateString(),
+            startTime: startDate.toLocaleTimeString(),
+            endTime: endDate.toLocaleTimeString(),
+            startTimeMs,
+            endTimeMs,
+            url: `https://codeforces.com/contests/${contest.id}`
+          };
+        });
       
-      // For now, log a warning and use the public API instead
-      console.log('Warning: Codeforces API authentication is not fully implemented. Using public API instead.');
-    }
-    
-    // Always use the public API for now
-    response = await axios.get(url);
-    
-    if (response.data.status !== 'OK') {
-      console.error('Codeforces API returned non-OK status:', response.data.status);
+      // Get the current time and filter based on provided date range
+      const now = new Date(startTime).getTime();
+      const maxDate = new Date(endTime).getTime();
+      
+      // Filter out contests that are too far in the future based on daysAhead
+      const filteredContests = upcomingContests.filter(contest => 
+        contest.startTimeMs >= now && contest.startTimeMs <= maxDate
+      );
+      
+      console.log(`Fetched ${filteredContests.length} upcoming Codeforces contests`);
+      return filteredContests;
+    } else {
+      console.error('Error fetching from Codeforces API: Invalid response format');
       return [];
     }
-    
-    // Filter for upcoming contests only (phase === 'BEFORE')
-    const upcomingContests = response.data.result.filter(contest => contest.phase === 'BEFORE');
-    
-    // Format contests to a standardized structure
-    return upcomingContests.map(contest => {
-      // Codeforces provides time in seconds since epoch
-      const startTimeMs = contest.startTimeSeconds * 1000;
-      const durationMs = contest.durationSeconds * 1000;
-      const endTimeMs = startTimeMs + durationMs;
-      
-      const startDate = new Date(startTimeMs);
-      const endDate = new Date(endTimeMs);
-      
-      return {
-        platform: 'Codeforces',
-        name: contest.name,
-        date: startDate.toDateString(),
-        startTime: startDate.toLocaleTimeString(),
-        endTime: endDate.toLocaleTimeString(),
-        startTimeMs,
-        endTimeMs,
-        url: `https://codeforces.com/contests/${contest.id}`,
-      };
-    });
   } catch (error) {
     console.error('Error fetching Codeforces contests:', error.message);
     return [];
@@ -79,7 +70,42 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
  * @see https://clist.by/api/v1/doc/
  * @returns {Promise<Array>} Array of formatted contest objects
  */
-async function fetchAtCoderContests() {
+async function fetchAtCoderContests(startTime, endTime) {
+  try {
+    // First, try to get from Clist.by API
+    let contests = await fetchAtCoderContestsFromClist(startTime, endTime);
+    
+    // If we didn't get any contests, try the AtCoder Problems API as a fallback
+    if (!contests || contests.length === 0) {
+      console.log('No AtCoder contests found from Clist.by, trying AtCoder Problems API...');
+      contests = await fetchAtCoderContestsFromProblems();
+      
+      // Filter by date range if we got contests
+      if (contests && contests.length > 0) {
+        const now = new Date(startTime).getTime();
+        const maxDate = new Date(endTime).getTime();
+        
+        contests = contests.filter(contest => 
+          contest.startTimeMs >= now && contest.startTimeMs <= maxDate
+        );
+      }
+    }
+    
+    console.log(`Fetched ${contests.length} upcoming AtCoder contests`);
+    return contests;
+  } catch (error) {
+    console.error('Error fetching AtCoder contests:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Fetches AtCoder contests from the Clist.by API
+ * @param {string} startTime - ISO string for start time
+ * @param {string} endTime - ISO string for end time 
+ * @returns {Promise<Array>} Array of contest objects
+ */
+async function fetchAtCoderContestsFromClist(startTime, endTime) {
   try {
     const username = process.env.CLIST_USERNAME;
     const apiKey = process.env.CLIST_API_KEY;
@@ -88,258 +114,222 @@ async function fetchAtCoderContests() {
     if (!username || !apiKey || 
         username === 'your_clist_username_here' || 
         apiKey === 'your_clist_api_key_here') {
-      console.error('Clist.by credentials are not configured. Please set CLIST_USERNAME and CLIST_API_KEY in your .env file.');
-      console.log('Attempting to fall back to the unofficial AtCoder Problems API...');
-      return fetchAtCoderContestsFromProblems();
+      console.log('Clist.by credentials not configured');
+      return [];
     }
     
     console.log('Fetching AtCoder contests from Clist.by API...');
-    console.log(`Using Clist.by credentials: ${username}`);
     
-    // Get current time and time 7 days ahead (or whatever is configured)
-    const daysAhead = parseInt(process.env.CONTEST_DAYS_AHEAD || '7', 10);
-    const now = new Date();
-    const futureDate = new Date(now);
-    futureDate.setDate(futureDate.getDate() + daysAhead);
-    
-    // Format dates for Clist.by API
-    const startTime = now.toISOString();
-    const endTime = futureDate.toISOString();
-    
-    console.log(`Looking for contests between ${startTime} and ${endTime}`);
-    
-    // Construct the API URL for Clist.by (using v1 which is known to work)
+    // Construct the API URL for Clist.by
     const url = 'https://clist.by/api/v1/contest/';
     
-    // Try different resource IDs for AtCoder
-    // We'll try first with resource ID 2 which should be AtCoder
-    const attemptWithResourceId = async (resourceId) => {
-      console.log(`Trying Clist.by with resource ID ${resourceId}...`);
-      
-      // Parameters for filtering contests
-      const params = {
-        resource__id: resourceId,
-        start__gte: startTime,
-        end__lte: endTime,
-        order_by: 'start',
-        limit: 100
-      };
-      
-      console.log('Using params:', JSON.stringify(params));
-      
-      // Set up authorization header based on the documentation
-      const headers = {
+    // Try to find the correct AtCoder resource ID
+    let resourceId = null;
+    try {
+      // Find available resources
+      const resourcesHeaders = {
         'Authorization': `ApiKey ${username}:${apiKey}`,
         'User-Agent': 'Discord Contest Bot'
       };
       
-      // Try up to 3 times with increasing timeouts
-      let attempts = 0;
-      const maxAttempts = 3;
-      let lastError = null;
+      const resourcesResponse = await axios.get('https://clist.by/api/v1/resource/', { 
+        headers: resourcesHeaders,
+        timeout: 10000
+      });
       
-      while (attempts < maxAttempts) {
-        attempts++;
-        const timeout = 10000 * attempts; // 10s, 20s, 30s
+      if (resourcesResponse.data && resourcesResponse.data.objects) {
+        const resources = resourcesResponse.data.objects;
+        console.log(`Found ${resources.length} resources from Clist.by`);
         
-        try {
-          console.log(`Clist.by API attempt ${attempts}/${maxAttempts} with ${timeout}ms timeout...`);
-          
-          // Make the API request with authorization header
-          const response = await axios.get(url, { 
-            params, 
-            headers,
-            timeout: timeout
-          });
-          
-          // Check if the response has the expected format
-          if (!response.data || !response.data.objects || !Array.isArray(response.data.objects)) {
-            console.error('Clist.by API returned unexpected data format:', typeof response.data);
-            if (response.data) {
-              console.log('Response data sample:', JSON.stringify(response.data).substring(0, 200));
-            }
-            continue; // Try again with longer timeout
-          }
-          
-          const contests = response.data.objects;
-          console.log(`Found ${contests.length} contests from Clist.by with resource ID ${resourceId}`);
-          
-          if (contests.length > 0) {
-            console.log('First Clist.by contest sample:');
-            console.log(JSON.stringify(contests[0], null, 2).substring(0, 500));
-            const formatted = formatClistContests(contests);
-            const atcoderContests = formatted.filter(c => c.platform === 'AtCoder');
-            console.log(`Found ${atcoderContests.length} AtCoder contests after filtering`);
-            
-            if (atcoderContests.length > 0) {
-              return atcoderContests;
-            }
-          }
-          
-          // If we reach here with no contests found, the loop will exit and try another resource ID
-          break;
-        } catch (error) {
-          lastError = error;
-          const errorMsg = error.response 
-            ? `Status: ${error.response.status}, ${error.response.statusText}` 
-            : error.message;
-            
-          console.error(`Clist.by API attempt ${attempts} with resource ID ${resourceId} failed: ${errorMsg}`);
-          
-          // If it's not a timeout error, no point in retrying
-          if (error.code !== 'ECONNABORTED' && error.code !== 'ETIMEDOUT') {
+        // Look for AtCoder by name or host
+        for (const resource of resources) {
+          if (resource.host && resource.host.includes('atcoder.jp')) {
+            resourceId = resource.id;
             break;
           }
-          
-          // Wait a bit before retrying
-          await sleep(1000);
-        }
-      }
-      
-      return null; // No AtCoder contests found with this resource ID
-    };
-    
-    // Try with different resource IDs
-    let atcoderContests = await attemptWithResourceId(2); // Try ID 2 first
-    
-    if (!atcoderContests || atcoderContests.length === 0) {
-      console.log('No AtCoder contests found with resource ID 2, trying with ID 93...');
-      atcoderContests = await attemptWithResourceId(93); // Try with ID 93 (another possible value)
-    }
-    
-    if (!atcoderContests || atcoderContests.length === 0) {
-      // Try without specifying a resource ID but with "atcoder" in the title
-      console.log('No AtCoder contests found with specific resource IDs, trying with title search...');
-      
-      const params = {
-        start__gte: startTime,
-        end__lte: endTime,
-        order_by: 'start',
-        limit: 100,
-        event__icontains: 'atcoder', // Search for "atcoder" in event title
-      };
-      
-      const headers = {
-        'Authorization': `ApiKey ${username}:${apiKey}`,
-        'User-Agent': 'Discord Contest Bot'
-      };
-      
-      try {
-        const response = await axios.get(url, { params, headers, timeout: 10000 });
-        
-        if (response.data && response.data.objects && Array.isArray(response.data.objects)) {
-          const contests = response.data.objects;
-          console.log(`Found ${contests.length} contests with "atcoder" in title`);
-          
-          if (contests.length > 0) {
-            const formatted = formatClistContests(contests);
-            atcoderContests = formatted.filter(c => c.platform === 'AtCoder');
-            console.log(`Found ${atcoderContests.length} AtCoder contests after filtering by title`);
-            
-            if (atcoderContests.length > 0) {
-              return atcoderContests;
-            }
+          else if (!resourceId && resource.name && resource.name.toLowerCase().includes('atcoder')) {
+            resourceId = resource.id;
+            break;
           }
         }
-      } catch (error) {
-        console.error('Error searching for AtCoder contests by title:', error.message);
+      }
+    } catch (error) {
+      console.log('Error checking resources:', error.message);
+    }
+    
+    // If not found, try common IDs
+    if (!resourceId) {
+      console.log('Looking for AtCoder in common resource IDs...');
+      const commonIds = [93, 1, 2, 102];
+      
+      for (const id of commonIds) {
+        try {
+          const testParams = {
+            resource__id: id,
+            start__gte: startTime,
+            end__lte: endTime,
+            limit: 5
+          };
+          
+          const testHeaders = {
+            'Authorization': `ApiKey ${username}:${apiKey}`,
+            'User-Agent': 'Discord Contest Bot'
+          };
+          
+          const testResponse = await axios.get(url, { 
+            params: testParams, 
+            headers: testHeaders,
+            timeout: 5000
+          });
+          
+          if (testResponse.data?.objects?.length > 0) {
+            const firstContest = testResponse.data.objects[0];
+            if (firstContest.href && firstContest.href.includes('atcoder.jp')) {
+              resourceId = id;
+              break;
+            }
+          }
+        } catch (error) {
+          // Log only on the last attempt
+          if (id === commonIds[commonIds.length - 1]) {
+            console.log('Error testing resource IDs');
+          }
+        }
       }
     }
     
-    // If we found any AtCoder contests, return them
-    if (atcoderContests && atcoderContests.length > 0) {
-      return atcoderContests;
+    // If still not found, try with title search
+    if (!resourceId) {
+      console.log('Could not find AtCoder resource ID, trying title search...');
+      
+      try {
+        const titleParams = {
+          event__icontains: 'atcoder',
+          start__gte: startTime,
+          end__lte: endTime,
+          limit: 100
+        };
+        
+        const headers = {
+          'Authorization': `ApiKey ${username}:${apiKey}`,
+          'User-Agent': 'Discord Contest Bot'
+        };
+        
+        const response = await axios.get(url, { 
+          params: titleParams, 
+          headers: headers,
+          timeout: 10000
+        });
+        
+        if (response.data?.objects?.length > 0) {
+          // Format the contests
+          return formatClistContests(response.data.objects);
+        }
+      } catch (error) {
+        console.log('Error searching by title:', error.message);
+      }
+      
+      return [];
     }
     
-    console.log('No AtCoder contests found in Clist.by with any method, falling back to AtCoder Problems API...');
-    return fetchAtCoderContestsFromProblems();
+    // If we found a resource ID, use it
+    console.log(`Using resource ID ${resourceId} for AtCoder`);
+    
+    const params = {
+      resource__id: resourceId,
+      start__gte: startTime,
+      end__lte: endTime,
+      order_by: 'start',
+      limit: 100
+    };
+    
+    const headers = {
+      'Authorization': `ApiKey ${username}:${apiKey}`,
+      'User-Agent': 'Discord Contest Bot'
+    };
+    
+    const response = await axios.get(url, { 
+      params: params, 
+      headers: headers,
+      timeout: 10000
+    });
+    
+    if (response.data?.objects?.length > 0) {
+      console.log(`Found ${response.data.objects.length} contests from Clist.by`);
+      return formatClistContests(response.data.objects);
+    }
+    
+    return [];
   } catch (error) {
-    console.error('Error fetching AtCoder contests from Clist.by:', error.message);
-    console.log('Falling back to unofficial AtCoder Problems API...');
-    return fetchAtCoderContestsFromProblems();
+    console.log('Error fetching from Clist.by:', error.message);
+    return [];
   }
 }
 
 /**
- * Helper function to format contest data from Clist.by API
- * @param {Array} contests - Array of contest objects from Clist.by
+ * Format Clist.by API contest data to our standard format
+ * @param {Array} contests - Contest data from Clist.by API
  * @returns {Array} Formatted contest objects
  */
 function formatClistContests(contests) {
-  console.log(`Formatting ${contests.length} contests from Clist.by API`);
+  console.log('Formatting contests from Clist.by API');
   
-  // Count platforms before filtering
+  // Track platform distribution for debugging
   const platformCounts = {};
   contests.forEach(contest => {
-    const resource = contest.resource?.name || 'unknown';
-    platformCounts[resource] = (platformCounts[resource] || 0) + 1;
+    const resource = contest.resource?.name;
+    if (resource) {
+      platformCounts[resource] = (platformCounts[resource] || 0) + 1;
+    }
   });
   console.log('Platform distribution in raw data:', JSON.stringify(platformCounts));
   
   return contests.map(contest => {
     try {
-      // Handle potential differences in field names between versions
-      const startField = contest.start || contest.startTime || contest.start_time;
-      const endField = contest.end || contest.endTime || contest.end_time;
-      const eventField = contest.event || contest.name || contest.title;
-      const urlField = contest.href || contest.url || contest.link;
-      const resourceField = contest.resource?.name || contest.platform || '';
+      const startTimeMs = new Date(contest.start).getTime();
+      const endTimeMs = new Date(contest.end).getTime();
       
-      const startTimeMs = new Date(startField).getTime();
-      const endTimeMs = new Date(endField).getTime();
-      
-      // Skip contests with invalid dates
-      if (isNaN(startTimeMs) || isNaN(endTimeMs)) {
-        console.warn(`Skipping contest with invalid date: ${eventField || 'unknown contest'}`);
-        return null;
-      }
-      
+      // Get dates in user's timezone
       const startDate = new Date(startTimeMs);
       const endDate = new Date(endTimeMs);
       
-      // Determine platform based on URL, resource field, or title
+      // Determine platform based on resource name or contest URL
       let platform = 'Unknown';
-      const resourceName = resourceField.toLowerCase();
+      const resourceName = contest.resource?.name?.toLowerCase() || '';
+      const contestUrl = contest.href?.toLowerCase() || '';
       
-      // Log the resource info for debugging
-      if (resourceName && resourceName.includes('atcoder')) {
-        console.log(`Found AtCoder contest in Clist data: ${eventField}`);
+      if (resourceName.includes('atcoder') || 
+          contestUrl.includes('atcoder.jp') || 
+          contest.event.includes('AtCoder')) {
         platform = 'AtCoder';
-      } else if (resourceName && resourceName.includes('codeforces')) {
+        console.log(`Found AtCoder contest in Clist data: ${contest.event}`);
+      } else if (resourceName.includes('codeforces') || 
+                contestUrl.includes('codeforces.com')) {
         platform = 'Codeforces';
-      } else if (urlField && urlField.includes('atcoder.jp')) {
-        console.log(`Found AtCoder contest by URL: ${eventField}`);
-        platform = 'AtCoder';
-      } else if (urlField && urlField.includes('codeforces.com')) {
-        platform = 'Codeforces';
-      } else if (eventField && eventField.toLowerCase().includes('atcoder')) {
-        console.log(`Found AtCoder contest by name: ${eventField}`);
-        platform = 'AtCoder';
-      } else if (eventField && eventField.toLowerCase().includes('codeforces')) {
-        platform = 'Codeforces';
+      } else {
+        console.log(`Platform unknown for contest: ${contest.event}, URL: ${contest.href}, resource: ${resourceName}`);
       }
       
-      // Skip contests with unknown platform
+      // Skip contests if platform is unknown
       if (platform === 'Unknown') {
-        console.log(`Platform unknown for contest: ${eventField}, URL: ${urlField}, resource: ${resourceField}`);
         return null;
       }
       
       return {
-        platform: platform,
-        name: eventField,
+        platform,
+        name: contest.event,
         date: startDate.toDateString(),
         startTime: startDate.toLocaleTimeString(),
         endTime: endDate.toLocaleTimeString(),
         startTimeMs,
         endTimeMs,
-        url: urlField,
+        url: contest.href,
       };
-    } catch (err) {
-      console.error(`Error processing Clist contest: ${contest.event || contest.name || 'unknown contest'}`, err);
+    } catch (error) {
+      console.error(`Error formatting contest: ${contest.event || 'unknown'}`, error.message);
       return null;
     }
-  }).filter(contest => contest !== null);  // Filter out null entries
+  }).filter(contest => contest !== null); // Remove any null entries
 }
 
 /**
@@ -349,62 +339,132 @@ function formatClistContests(contests) {
 async function fetchAtCoderContestsFromProblems() {
   try {
     // Using the unofficial AtCoder Problems API by kenkoooo
-    console.log('Fetching contests from AtCoder Problems API...');
+    console.log('Fetching contests from AtCoder...');
     
     // Try direct contest page scraping first for the most up-to-date data
     let scrapedContests = [];
     try {
       const directUrl = 'https://atcoder.jp/contests/';
-      console.log(`Trying direct fetch from ${directUrl} for backup...`);
       
       const response = await axios.get(directUrl, { 
         timeout: 15000,
         headers: {
-          'User-Agent': 'Discord Contest Bot - Respecting API Guidelines'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
       });
       
       if (response.data && typeof response.data === 'string') {
-        console.log('Received HTML response from AtCoder website directly, parsing contests...');
+        console.log('Parsing contests from AtCoder website...');
         
-        // Very basic HTML parsing to extract contest info
-        // Look for the upcoming contests table
+        // Save HTML to examine structure
         const html = response.data;
         
-        // Look for the upcoming contests section
-        const upcomingSection = html.includes('Upcoming Contests') 
-          ? html.split('Upcoming Contests')[1] 
-          : (html.includes('予定されたコンテスト') ? html.split('予定されたコンテスト')[1] : '');
-          
+        // Try multiple ways to find the upcoming contests section
+        let upcomingSection = '';
+        
+        // Method 1: Look for the specific heading
+        if (html.includes('Upcoming Contests')) {
+          upcomingSection = html.split('Upcoming Contests')[1];
+        } 
+        // Method 2: Look for Japanese heading
+        else if (html.includes('予定されたコンテスト')) {
+          upcomingSection = html.split('予定されたコンテスト')[1];
+        }
+        
         if (upcomingSection) {
-          console.log('Found upcoming contests section on AtCoder website');
+          // Find the closing table tag to limit our search
+          const endIndex = upcomingSection.indexOf('</table>');
+          if (endIndex > 0) {
+            upcomingSection = upcomingSection.substring(0, endIndex + 8); // Include </table>
+          }
           
-          // Extract contest rows - this is a simple parser and might break if AtCoder changes their HTML
-          const contestRows = upcomingSection.split('<tr>').slice(1);
+          // Get all table rows - more robust approach
+          const rows = upcomingSection.split('<tr');
+          console.log(`Found ${rows.length - 1} potential contest rows`);
+          
           const now = Date.now();
-          
-          for (const row of contestRows) {
+          let foundCount = 0;
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
             try {
-              // Extract contest name
-              const nameMatch = row.match(/<a href="\/contests\/([^"]+)">(.*?)<\/a>/);
-              if (!nameMatch) continue;
+              // Extract contest name with more robust regex
+              const nameMatch = row.match(/<a href="\/contests\/([^"]+)"[^>]*>(.*?)<\/a>/);
+              if (!nameMatch) {
+                continue;
+              }
               
               const contestId = nameMatch[1];
-              const contestName = nameMatch[2].trim();
+              let contestName = nameMatch[2].trim();
+              // Clean up HTML entities
+              contestName = contestName.replace(/&amp;/g, '&')
+                                      .replace(/&lt;/g, '<')
+                                      .replace(/&gt;/g, '>');
               
-              // Extract start time 
-              const startTimeMatch = row.match(/>\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s*</);
-              if (!startTimeMatch) continue;
+              // Try multiple regex patterns for start time
+              let startTimeMatch = null;
+              let startTimeString = null;
               
-              const startTimeString = startTimeMatch[1];
-              const startTimeMs = new Date(startTimeString + ' UTC+9').getTime(); // AtCoder times are JST
+              // Pattern 1: Look for time element directly - this is the most reliable method
+              const timeElementMatch = row.match(/<time[^>]*>(.*?)<\/time>/);
+              if (timeElementMatch) {
+                startTimeString = timeElementMatch[1];
+              }
+              
+              // Pattern 2: Original format (2025-03-22 12:00:00)
+              if (!startTimeString) {
+                startTimeMatch = row.match(/>\s*(20\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s*</);
+                if (startTimeMatch) {
+                  startTimeString = startTimeMatch[1];
+                }
+              }
+              
+              // Pattern 3: Alternative format with different separators
+              if (!startTimeString) {
+                startTimeMatch = row.match(/>\s*(20\d{2}\/\d{2}\/\d{2}\s+\d{2}:\d{2})\s*</);
+                if (startTimeMatch) {
+                  startTimeString = startTimeMatch[1];
+                }
+              }
+              
+              // Pattern 4: Try with data attributes
+              if (!startTimeString) {
+                startTimeMatch = row.match(/data-timestamp="(\d+)"/);
+                if (startTimeMatch) {
+                  // Convert unix timestamp (seconds) to date string
+                  const timestamp = parseInt(startTimeMatch[1], 10) * 1000;
+                  const date = new Date(timestamp);
+                  startTimeString = date.toISOString().replace('T', ' ').substr(0, 19);
+                }
+              }
+              
+              if (!startTimeString) {
+                // Skip this contest without extensive logging
+                continue;
+              }
+              
+              // Handle different date formats
+              let startTimeMs;
+              if (startTimeString.match(/^\d+$/)) {
+                // It's a timestamp
+                startTimeMs = parseInt(startTimeString, 10) * 1000;
+              } else {
+                // It's a date string - assume JST (UTC+9)
+                startTimeMs = new Date(startTimeString + ' UTC+9').getTime();
+              }
               
               // Skip past contests
-              if (startTimeMs < now) continue;
+              if (startTimeMs < now) {
+                continue;
+              }
               
-              // Extract duration
-              const durationMatch = row.match(/>\s*([\d:]+)\s*</);
-              const durationString = durationMatch ? durationMatch[1] : '2:00';
+              // Extract duration with more robust regex
+              let durationString = '2:00'; // Default 2 hours
+              const durationMatch = row.match(/>\s*([\d:]{1,5})\s*</);
+              if (durationMatch) {
+                durationString = durationMatch[1];
+              }
+              
+              // Calculate end time
               const [hours, minutes] = durationString.split(':').map(Number);
               const durationMs = (hours * 60 + minutes) * 60 * 1000;
               const endTimeMs = startTimeMs + durationMs;
@@ -423,20 +483,27 @@ async function fetchAtCoderContestsFromProblems() {
                 url: `https://atcoder.jp/contests/${contestId}`,
               });
               
-              console.log(`Scraped contest: ${contestName} at ${startDate.toLocaleString()}`);
+              foundCount++;
             } catch (err) {
-              console.log('Error parsing contest row, skipping', err.message);
+              // Minimize error logging
+              console.log(`Error parsing contest row ${i}`);
             }
           }
           
           if (scrapedContests.length > 0) {
             console.log(`Successfully scraped ${scrapedContests.length} contests from AtCoder website`);
             return scrapedContests;
+          } else {
+            console.log('No contests found on AtCoder website, trying API fallback');
           }
+        } else {
+          console.log('Could not find upcoming contests section in AtCoder HTML');
         }
+      } else {
+        console.log('Did not receive valid HTML from AtCoder website');
       }
     } catch (err) {
-      console.log('Direct AtCoder website fetch or parsing failed:', err.message);
+      console.log('Direct AtCoder website fetch failed, trying API fallback');
     }
     
     // Continue with the AtCoder Problems API
@@ -465,16 +532,11 @@ async function fetchAtCoderContestsFromProblems() {
         const startTimeMs = new Date(contest.start_time).getTime();
         return startTimeMs > now && !isNaN(startTimeMs);
       } catch (err) {
-        console.error(`Error filtering contest: ${contest.id || 'unknown contest'}`);
         return false;
       }
     });
     
     console.log(`Found ${upcomingContests.length} upcoming AtCoder contests from Problems API`);
-    if (upcomingContests.length > 0) {
-      console.log('First AtCoder contest from API:');
-      console.log(JSON.stringify(upcomingContests[0], null, 2));
-    }
     
     // Format contests to a standardized structure
     return upcomingContests.map(contest => {
@@ -487,7 +549,6 @@ async function fetchAtCoderContestsFromProblems() {
         
         // Only include contests with valid dates
         if (isNaN(startTimeMs) || isNaN(endTimeMs)) {
-          console.warn(`Skipping contest with invalid date: ${contest.id || 'unknown contest'}`);
           return null;
         }
         
@@ -509,7 +570,6 @@ async function fetchAtCoderContestsFromProblems() {
         
         // Skip contests with unknown platform
         if (platform === 'Unknown') {
-          console.warn(`Skipping contest with unknown platform: ${contest.id || 'unknown'} - ${contest.title || 'untitled'}`);
           return null;
         }
         
@@ -526,12 +586,11 @@ async function fetchAtCoderContestsFromProblems() {
              : `https://atcoder.jp/contests/${contest.id}`,
         };
       } catch (err) {
-        console.error(`Error processing contest: ${contest.id || 'unknown contest'}`, err);
         return null;
       }
     }).filter(contest => contest !== null);  // Filter out null entries
   } catch (error) {
-    console.error('Error fetching AtCoder contests from Problems API:', error.message);
+    console.error('Error fetching AtCoder contests:', error.message);
     return [];
   }
 }
@@ -540,60 +599,55 @@ async function fetchAtCoderContestsFromProblems() {
  * Fetches contests from all platforms and filters for the next X days
  * @returns {Promise<Array>} Combined array of contest objects sorted by start time
  */
-async function fetchContests() {
+async function fetchContests(daysAhead = 7) {
   try {
-    // Get the number of days to look ahead (default: 7)
-    const daysAhead = parseInt(process.env.CONTEST_DAYS_AHEAD || '7', 10);
+    console.log('Fetching upcoming contests...');
     
-    // For AtCoder, we'll look further ahead to ensure we get contests
-    const atcoderDaysAhead = Math.max(daysAhead, 45); // Look up to 45 days ahead for AtCoder
+    // Calculate the date range for fetching contests
+    const startTime = new Date().toISOString();
+    const endTime = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000).toISOString();
     
-    console.log(`Looking ahead ${daysAhead} days for contests, ${atcoderDaysAhead} days for AtCoder specifically`);
+    // Fetch contests from multiple sources
+    const [cfContests, atCoderContests] = await Promise.all([
+      fetchCodeforcesContests(startTime, endTime),
+      fetchAtCoderContests(startTime, endTime),
+    ]);
     
-    // Modify the environment temporarily for AtCoder fetching
-    const originalDaysAhead = process.env.CONTEST_DAYS_AHEAD;
-    process.env.CONTEST_DAYS_AHEAD = atcoderDaysAhead.toString();
+    // Log the summary of contests found
+    console.log(`Fetched ${cfContests.length} Codeforces contests, ${atCoderContests.length} AtCoder contests`);
     
-    // Fetch AtCoder contests with extended timeframe
-    const atcoderContests = await fetchAtCoderContests();
-    
-    // Restore original setting
-    process.env.CONTEST_DAYS_AHEAD = originalDaysAhead;
-    
-    // Fetch Codeforces with normal timeframe
-    const codeforcesContests = await fetchCodeforcesContests();
-    
-    // Log details about the fetched contests
-    console.log(`Fetched ${codeforcesContests.length} Codeforces contests`);
-    console.log(`Fetched ${atcoderContests.length} AtCoder contests`);
-    
-    if (atcoderContests.length === 0) {
-      console.log('WARNING: No AtCoder contests found. This might indicate an issue with the Clist.by API or AtCoder Problems API.');
-    }
-    
-    // Combine contests from both platforms
-    let allContests = [...codeforcesContests, ...atcoderContests];
-    
-    // Get the current date and the date X days from now (using standard daysAhead)
+    // Filter contests by date
     const now = Date.now();
-    const futureDateMs = now + daysAhead * 24 * 60 * 60 * 1000;
+    const maxDate = now + daysAhead * 24 * 60 * 60 * 1000;
     
-    // Filter contests happening in the specified time range
-    const filteredContests = allContests.filter(contest => {
-      const isInTimeRange = contest.startTimeMs >= now && contest.startTimeMs <= futureDateMs;
-      if (!isInTimeRange && contest.platform === 'AtCoder') {
-        console.log(`AtCoder contest "${contest.name}" excluded because it's scheduled for ${new Date(contest.startTimeMs).toLocaleString()}, which is outside the ${daysAhead}-day window`);
+    // Filter contests to keep only those within the date range
+    let contests = [...cfContests, ...atCoderContests].filter(contest => {
+      const isWithinRange = contest.startTimeMs >= now && contest.startTimeMs <= maxDate;
+      
+      // Only log if contest is excluded
+      if (!isWithinRange && contest.startTimeMs > maxDate) {
+        console.log(`Contest "${contest.name}" excluded: outside the ${daysAhead}-day window`);
       }
-      return isInTimeRange;
+      
+      return isWithinRange;
     });
     
-    console.log(`After date filtering: ${filteredContests.length} total contests remain`);
-    console.log(`AtCoder contests after filtering: ${filteredContests.filter(c => c.platform === 'AtCoder').length}`);
+    // Sort contests by start time
+    contests.sort((a, b) => a.startTimeMs - b.startTimeMs);
     
-    // Sort contests by start time (earliest first)
-    filteredContests.sort((a, b) => a.startTimeMs - b.startTimeMs);
+    // Count contests by platform after filtering
+    const platformCounts = contests.reduce((acc, contest) => {
+      acc[contest.platform] = (acc[contest.platform] || 0) + 1;
+      return acc;
+    }, {});
     
-    return filteredContests;
+    // Log summary of filtered contests
+    console.log(`After date filtering: ${contests.length} total contests remain`);
+    Object.entries(platformCounts).forEach(([platform, count]) => {
+      console.log(`${platform} contests after filtering: ${count}`);
+    });
+    
+    return contests;
   } catch (error) {
     console.error('Error fetching contests:', error.message);
     return [];
