@@ -74,32 +74,136 @@ async function fetchCodeforcesContests() {
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Fetches upcoming contests from AtCoder Problems API (unofficial)
- * Uses the API provided by kenkoooo's AtCoder Problems project
- * @see https://github.com/kenkoooo/AtCoderProblems/blob/master/doc/api.md
+ * Fetches upcoming contests from Clist.by API v4 for AtCoder
+ * @see https://clist.by/api/v4/doc/
  * @returns {Promise<Array>} Array of formatted contest objects
  */
 async function fetchAtCoderContests() {
   try {
+    const username = process.env.CLIST_USERNAME;
+    const apiKey = process.env.CLIST_API_KEY;
+    
+    // Check if Clist.by credentials are provided
+    if (!username || !apiKey || 
+        username === 'your_clist_username_here' || 
+        apiKey === 'your_clist_api_key_here') {
+      console.error('Clist.by credentials are not configured. Please set CLIST_USERNAME and CLIST_API_KEY in your .env file.');
+      console.log('Attempting to fall back to the unofficial AtCoder Problems API...');
+      return fetchAtCoderContestsFromProblems();
+    }
+    
+    console.log('Fetching AtCoder contests from Clist.by API v4...');
+    
+    // Get current time and time 7 days ahead (or whatever is configured)
+    const daysAhead = parseInt(process.env.CONTEST_DAYS_AHEAD || '7', 10);
+    const now = new Date();
+    const futureDate = new Date(now);
+    futureDate.setDate(futureDate.getDate() + daysAhead);
+    
+    // Format dates for Clist.by API
+    const startTime = now.toISOString();
+    const endTime = futureDate.toISOString();
+    
+    // Construct the API URL for Clist.by v4
+    const url = 'https://clist.by/api/v4/contests/';
+    const params = {
+      username: username,
+      api_key: apiKey,
+      resource: 'atcoder.jp', // Filter to only AtCoder contests
+      start__gte: startTime,  // Start time greater than or equal to now
+      end__lte: endTime,      // End time less than or equal to future date
+      order_by: 'start',      // Order by start time
+      limit: 100              // Limit the number of results
+    };
+    
+    // Make the API request
+    const response = await axios.get(url, { params });
+    
+    // Check if the response has the expected format
+    // Note: The structure of response might be different in v4 compared to v2
+    if (!response.data || !response.data.objects || !Array.isArray(response.data.objects)) {
+      console.error('Clist.by API v4 returned unexpected data format:', response.data);
+      
+      // If the response structure is different in v4, try to adapt
+      if (response.data && Array.isArray(response.data.results)) {
+        console.log('Found alternate data structure in v4 API, adapting...');
+        const contests = response.data.results;
+        return formatClistContests(contests);
+      }
+      
+      if (response.data && Array.isArray(response.data)) {
+        console.log('Found direct array in v4 API response, adapting...');
+        return formatClistContests(response.data);
+      }
+      
+      return fetchAtCoderContestsFromProblems();
+    }
+    
+    const contests = response.data.objects;
+    console.log(`Found ${contests.length} upcoming AtCoder contests from Clist.by v4`);
+    
+    return formatClistContests(contests);
+  } catch (error) {
+    console.error('Error fetching AtCoder contests from Clist.by v4:', error.message);
+    console.log('Falling back to unofficial AtCoder Problems API...');
+    return fetchAtCoderContestsFromProblems();
+  }
+}
+
+/**
+ * Helper function to format contest data from Clist.by API
+ * @param {Array} contests - Array of contest objects from Clist.by
+ * @returns {Array} Formatted contest objects
+ */
+function formatClistContests(contests) {
+  return contests.map(contest => {
+    // Handle potential differences in field names between v2 and v4
+    const startField = contest.start || contest.startTime || contest.start_time;
+    const endField = contest.end || contest.endTime || contest.end_time;
+    const eventField = contest.event || contest.name || contest.title;
+    const urlField = contest.href || contest.url || contest.link;
+    
+    const startTimeMs = new Date(startField).getTime();
+    const endTimeMs = new Date(endField).getTime();
+    
+    const startDate = new Date(startTimeMs);
+    const endDate = new Date(endTimeMs);
+    
+    return {
+      platform: 'AtCoder',
+      name: eventField,
+      date: startDate.toDateString(),
+      startTime: startDate.toLocaleTimeString(),
+      endTime: endDate.toLocaleTimeString(),
+      startTimeMs,
+      url: urlField,
+    };
+  });
+}
+
+/**
+ * Fallback function to fetch contests from unofficial AtCoder Problems API
+ * @returns {Promise<Array>} Array of formatted contest objects
+ */
+async function fetchAtCoderContestsFromProblems() {
+  try {
     // Using the unofficial AtCoder Problems API by kenkoooo
-    // As per API guidelines, we should not hit the API too frequently
     console.log('Fetching contests from AtCoder Problems API...');
     
     const url = 'https://kenkoooo.com/atcoder/resources/contests.json';
     
     // Respect API rate limiting guidelines (sleep at least 1 second between accesses)
-    // Adding this sleep even though we're only making one request to be respectful of the API
     await sleep(1000);
     
     const response = await axios.get(url, { 
-      timeout: 10000,  // 10 second timeout
+      timeout: 10000,
       headers: {
         'User-Agent': 'Discord Contest Bot - Respecting API Guidelines'
       }
     });
     
     if (!Array.isArray(response.data)) {
-      console.error('AtCoder API returned invalid data format');
+      console.error('AtCoder Problems API returned invalid data format');
       return [];
     }
     
@@ -110,6 +214,8 @@ async function fetchAtCoderContests() {
       const startTimeMs = new Date(contest.start_time).getTime();
       return startTimeMs > now;
     });
+    
+    console.log(`Found ${upcomingContests.length} upcoming AtCoder contests from Problems API`);
     
     // Format contests to a standardized structure
     return upcomingContests.map(contest => {
@@ -130,7 +236,7 @@ async function fetchAtCoderContests() {
       };
     });
   } catch (error) {
-    console.error('Error fetching AtCoder contests:', error.message);
+    console.error('Error fetching AtCoder contests from Problems API:', error.message);
     return [];
   }
 }

@@ -11,6 +11,7 @@ A Discord bot that fetches upcoming contest information from Codeforces and AtCo
 - Manual checking via commands
 - Optimized for Railway deployment with Railpack
 - Health monitoring for all connected services
+- Support for multiple contest data sources including Clist.by v4 API
 
 ## File Structure and Purpose
 
@@ -51,6 +52,17 @@ A Discord bot that fetches upcoming contest information from Codeforces and AtCo
    - **MESSAGE CONTENT INTENT** - Required to read command messages
 2. These intents are **required** for the bot to function properly
 3. Save changes after enabling these settings
+
+### Getting Clist.by API Credentials (Required for AtCoder Contests)
+
+Clist.by is a comprehensive programming contest calendar that aggregates contests from multiple platforms including AtCoder. To get the most accurate and up-to-date contest information, this bot uses Clist.by's API.
+
+1. Go to [Clist.by](https://clist.by/) and create an account or sign in
+2. After signing in, go to your profile page (click on your username in the top right)
+3. Scroll down to the "API" section
+4. Note your API key and username (these will be used for `CLIST_API_KEY` and `CLIST_USERNAME` in your .env file)
+
+If you don't set up Clist.by credentials, the bot will fall back to the unofficial AtCoder Problems API, which may not have complete information about upcoming contests.
 
 ### Inviting the Bot to Your Server
 
@@ -105,7 +117,7 @@ npm install
 cp .env.example .env
 ```
 
-4. Edit the `.env` file with your Discord token, channel ID, and other optional settings
+4. Edit the `.env` file with your Discord token, channel ID, Clist.by credentials, and other optional settings
 
 5. Start the bot in development mode
 
@@ -139,6 +151,8 @@ npm run dev
 
      - `DISCORD_TOKEN` - Your Discord bot token (obtained from Discord Developer Portal)
      - `DISCORD_CHANNEL_ID` - The ID of the channel where contest announcements will be sent
+     - `CLIST_USERNAME` - Your Clist.by username
+     - `CLIST_API_KEY` - Your Clist.by API key
 
      **Optional Variables:**
 
@@ -186,6 +200,8 @@ You can configure the bot by setting the following environment variables:
 | ------------------------ | ---------------------------------------------- | --------------------------------- | -------- |
 | `DISCORD_TOKEN`          | Your Discord bot token                         | -                                 | Yes      |
 | `DISCORD_CHANNEL_ID`     | The channel ID for announcements               | -                                 | Yes      |
+| `CLIST_USERNAME`         | Your Clist.by username                         | -                                 | Yes\*    |
+| `CLIST_API_KEY`          | Your Clist.by API key                          | -                                 | Yes\*    |
 | `CONTEST_ROLE_ID`        | Role ID to mention for contest announcements   | -                                 | No       |
 | `CONTEST_DAYS_AHEAD`     | Number of days to look ahead for contests      | 7                                 | No       |
 | `CONTEST_CHECK_SCHEDULE` | Cron schedule expression for checking contests | `0 12 * * *` (daily at 12:00 UTC) | No       |
@@ -193,6 +209,8 @@ You can configure the bot by setting the following environment variables:
 | `CODEFORCES_API_SECRET`  | Codeforces API secret (not currently used)     | -                                 | No       |
 | `LOG_LEVEL`              | Logging level (debug, info, warn, error)       | info                              | No       |
 | `PORT`                   | Port for the health check server               | 3000                              | No       |
+
+\*Required for reliable AtCoder contest information. The bot will fall back to the unofficial AtCoder Problems API if not provided.
 
 ## Usage
 
@@ -212,7 +230,7 @@ The bot includes a built-in health monitoring system that checks:
 
 - Connection to Discord API
 - Connection to Codeforces API
-- Connection to AtCoder Problems API
+- Connection to AtCoder data sources (either AtCoder Problems API or Clist.by API)
 
 To check the health of your bot:
 
@@ -223,7 +241,11 @@ To check the health of your bot:
 
 - **Codeforces API**: Uses the official public API (https://codeforces.com/api/contest.list). This API is publicly accessible and doesn't require authentication. While the bot includes support for API credentials, they're not currently used.
 
-- **AtCoder API**: AtCoder doesn't provide an official API. The bot uses the unofficial AtCoder Problems API maintained by kenkoooo (https://github.com/kenkoooo/AtCoderProblems/blob/master/doc/api.md). This API doesn't require authentication but has rate limiting guidelines that the bot respects.
+- **AtCoder API**: AtCoder doesn't provide an official API. The bot uses two alternatives:
+  1. **Primary: Clist.by API v4** - A comprehensive contest aggregator that provides reliable AtCoder contest data (https://clist.by/)
+  2. **Fallback: AtCoder Problems API** - An unofficial API maintained by kenkoooo (https://github.com/kenkoooo/AtCoderProblems/blob/master/doc/api.md)
+
+For the most reliable AtCoder contest information, it's recommended to set up Clist.by credentials.
 
 ## License
 
