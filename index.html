@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contest Pulse | Discord Bot</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="images/favicon.png">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="logo">
+                <img src="images/logo.png" alt="Contest Pulse Logo">
+                <h1>Contest Pulse</h1>
+            </div>
+            <nav>
+                <ul>
+                    <li><a href="#features">Features</a></li>
+                    <li><a href="#setup">Setup</a></li>
+                    <li><a href="#commands">Commands</a></li>
+                    <li><a href="https://github.com/shafiswapnil/discord-codeforces-bot" target="_blank" class="github-link"><i class="fab fa-github"></i> GitHub</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <h1>Never Miss a Coding Contest Again</h1>
+                <p>A Discord bot that provides timely reminders for upcoming programming contests on Codeforces and AtCoder platforms.</p>
+                <div class="cta-buttons">
+                    <a href="https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=8&scope=bot" class="btn primary" target="_blank">Add to Discord</a>
+                    <a href="#setup" class="btn secondary">Setup Guide</a>
+                </div>
+            </div>
+            <div class="hero-image">
+                <img src="images/bot-preview.png" alt="Contest Pulse Bot Preview">
+            </div>
+        </div>
+    </section>
+
+    <section id="features" class="features">
+        <div class="container">
+            <h2>Features</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-calendar-check"></i>
+                    </div>
+                    <h3>Reliable Contest Tracking</h3>
+                    <p>Fetches contests from multiple sources to ensure complete coverage of Codeforces and AtCoder.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-bell"></i>
+                    </div>
+                    <h3>Smart Reminder System</h3>
+                    <p>Sends contest reminders at 1 day, 6 hours, and 30 minutes before each contest.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-globe"></i>
+                    </div>
+                    <h3>Timezone Support</h3>
+                    <p>Configure your local timezone for displaying contest times accurately.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-bolt"></i>
+                    </div>
+                    <h3>Optimized Performance</h3>
+                    <p>Reduced API calls with smart caching and fallback mechanisms for API failures.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="commands" class="commands">
+        <div class="container">
+            <h2>Bot Commands</h2>
+            <div class="commands-table">
+                <div class="command">
+                    <div class="command-name">!contests</div>
+                    <div class="command-desc">Shows all upcoming contests within the configured timeframe</div>
+                </div>
+                <div class="command">
+                    <div class="command-name">!today</div>
+                    <div class="command-desc">Shows contests happening today with time until start</div>
+                </div>
+                <div class="command">
+                    <div class="command-name">!tomorrow</div>
+                    <div class="command-desc">Shows contests happening tomorrow</div>
+                </div>
+                <div class="command">
+                    <div class="command-name">!setup-reminders</div>
+                    <div class="command-desc">Manually refreshes contest data and reschedules reminders</div>
+                </div>
+                <div class="command">
+                    <div class="command-name">!health</div>
+                    <div class="command-desc">Performs a health check on the contest APIs</div>
+                </div>
+                <div class="command">
+                    <div class="command-name">!help</div>
+                    <div class="command-desc">Shows a list of available commands</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="setup" class="setup">
+        <div class="container">
+            <h2>Setup Guide</h2>
+            <div class="setup-steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Create a Discord Bot</h3>
+                        <p>Go to the <a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a>, create a new application, and add a bot to it.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Get Clist.by API Credentials</h3>
+                        <p>Create an account on <a href="https://clist.by/" target="_blank">Clist.by</a> and get your API key for reliable AtCoder contest data.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>Configure Environment Variables</h3>
+                        <p>Set up your .env file with Discord credentials, Clist.by API key, and optional settings.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h3>Deploy the Bot</h3>
+                        <p>Deploy the bot using Railway, Heroku, or run it on your own server.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="setup-code">
+                <h3>Environment Variables Example</h3>
+                <pre><code># Required Discord Bot Configuration
+DISCORD_TOKEN=your_discord_bot_token
+DISCORD_CHANNEL_ID=your_discord_channel_id
+
+# Clist.by API Credentials
+CLIST_USERNAME=your_clist_username
+CLIST_API_KEY=your_clist_api_key
+
+# Optional Settings
+TIMEZONE=Asia/Dhaka
+CONTEST_DAYS_AHEAD=7
+</code></pre>
+            </div>
+            
+            <div class="deployment-options">
+                <h3>Deployment Options</h3>
+                <div class="deployment-buttons">
+                    <a href="https://github.com/shafiswapnil/discord-codeforces-bot#local-development" class="btn secondary" target="_blank">
+                        <i class="fas fa-laptop-code"></i> Local Deployment
+                    </a>
+                    <a href="https://github.com/shafiswapnil/discord-codeforces-bot#railway-deployment" class="btn secondary" target="_blank">
+                        <i class="fas fa-train"></i> Railway Deployment
+                    </a>
+                </div>
+                <p class="readme-link">For complete documentation and advanced configuration options, 
+                   <a href="https://github.com/shafiswapnil/discord-codeforces-bot/blob/main/README.md" target="_blank">
+                      read the full README.md on GitHub</a>.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta">
+        <div class="container">
+            <h2>Ready to keep your server updated with programming contests?</h2>
+            <a href="https://github.com/shafiswapnil/discord-codeforces-bot" class="btn primary" target="_blank">
+                <i class="fab fa-github"></i> Get Started on GitHub
+            </a>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-logo">
+                    <img src="images/logo.png" alt="Contest Pulse Logo">
+                    <span>Contest Pulse</span>
+                </div>
+                <div class="footer-links">
+                    <a href="https://github.com/shafiswapnil/discord-codeforces-bot" target="_blank">GitHub</a>
+                    <a href="https://github.com/shafiswapnil/discord-codeforces-bot/issues" target="_blank">Report Issues</a>
+                    <a href="https://github.com/shafiswapnil/discord-codeforces-bot/blob/main/LICENSE" target="_blank">License</a>
+                </div>
+            </div>
+            <div class="footer-copyright">
+                <p>&copy; 2023 Contest Pulse. Open source under ISC License.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html> 
