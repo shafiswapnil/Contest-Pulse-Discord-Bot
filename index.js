@@ -104,7 +104,7 @@ client.on('messageCreate', async (message) => {
         { name: 'Overall Status', value: result.status, inline: false },
         { name: 'Discord API', value: result.services.discord, inline: true },
         { name: 'Codeforces API', value: result.services.codeforces, inline: true },
-        { name: 'AtCoder API', value: result.services.atcoder, inline: true }
+        { name: 'AtCoder Problems API', value: result.services.atcoder_problems, inline: true }
       )
       .setTimestamp();
     

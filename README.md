@@ -151,7 +151,6 @@ npm run dev
 
      - `CODEFORCES_API_KEY` - Your Codeforces API key
      - `CODEFORCES_API_SECRET` - Your Codeforces API secret
-     - `ATCODER_API_KEY` - Your AtCoder API key
 
      **Server Configuration:**
 
@@ -193,7 +192,6 @@ You can configure the bot by setting the following environment variables:
 | `CONTEST_CHECK_SCHEDULE` | Cron schedule expression for checking contests | `0 12 * * *` (daily at 12:00 UTC) |
 | `CODEFORCES_API_KEY`     | Codeforces API key (optional)                  | -                                 |
 | `CODEFORCES_API_SECRET`  | Codeforces API secret (optional)               | -                                 |
-| `ATCODER_API_KEY`        | AtCoder API key (optional)                     | -                                 |
 | `LOG_LEVEL`              | Logging level (debug, info, warn, error)       | info                              |
 | `PORT`                   | Port for the health check server               | 3000                              |
 
@@ -215,7 +213,7 @@ The bot includes a built-in health monitoring system that checks:
 
 - Connection to Discord API
 - Connection to Codeforces API
-- Connection to AtCoder API
+- Connection to AtCoder Problems API
 
 To check the health of your bot:
 
@@ -224,9 +222,9 @@ To check the health of your bot:
 
 ## API Notes
 
-- The public Codeforces API currently doesn't require authentication, but the bot supports API keys if they're needed in the future
-- The AtCoder API used is an unofficial API that doesn't require authentication
-- If either service changes their API requirements, update the respective keys in your environment variables
+- **Codeforces API**: Uses the official public API (https://codeforces.com/api/contest.list). This API currently doesn't require authentication, but the bot supports API keys if they're needed in the future.
+
+- **AtCoder API**: AtCoder doesn't provide an official API. The bot uses the unofficial AtCoder Problems API maintained by kenkoooo (https://github.com/kenkoooo/AtCoderProblems/blob/master/doc/api.md). This API doesn't require authentication but has rate limiting guidelines that the bot respects.
 
 ## License
 
