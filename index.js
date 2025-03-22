@@ -151,17 +151,13 @@ client.on('messageCreate', async message => {
   // Check for contests tomorrow
   if (message.content === '!tomorrow') {
     message.channel.send('Checking for contests tomorrow...');
-    const hasContests = await checkTomorrowContests(client);
-    
-    if (!hasContests) {
-      message.channel.send('No contests scheduled for tomorrow.');
-    }
+    const hasContests = await checkTomorrowContests(client, message.channel);
   }
   
   // Check for contests today
   if (message.content === '!today') {
     message.channel.send('Checking for contests today...');
-    await sendTodayContestReminders(client);
+    await sendTodayContestReminders(client, message.channel);
   }
   
   // Manual reminder setup

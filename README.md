@@ -71,6 +71,13 @@ Each reminder includes:
 - Date and time information in your local timezone
 - Link to the contest page
 
+## Message Channels
+
+The bot handles message destinations intelligently:
+
+- **Scheduled Reminders**: All automatic reminders (1 day, 6 hours, 30 minutes before contests) and daily scheduled checks are sent to the channel specified by `DISCORD_CHANNEL_ID` in your .env file.
+- **Command Responses**: When users run commands like `!contests`, `!today`, or `!tomorrow`, the responses are sent to the same channel where the command was issued. This allows users to use commands in any channel while keeping scheduled announcements centralized.
+
 ## Setup
 
 ### Creating a Discord Bot
@@ -104,7 +111,7 @@ Copy the `.env.example` file to `.env` and fill in:
 
 ```
 DISCORD_TOKEN=your_bot_token
-DISCORD_CHANNEL_ID=your_announcement_channel_id
+DISCORD_CHANNEL_ID=your_announcement_channel_id  # For scheduled reminders
 CLIST_USERNAME=your_clist_username
 CLIST_API_KEY=your_clist_api_key
 TIMEZONE=Asia/Dhaka  # For Bangladesh time
@@ -133,17 +140,17 @@ npm run dev
 
 ## Configuration Options
 
-| Variable                 | Description                                  | Default         | Required |
-| ------------------------ | -------------------------------------------- | --------------- | -------- |
-| `DISCORD_TOKEN`          | Discord bot token                            | -               | Yes      |
-| `DISCORD_CHANNEL_ID`     | Channel ID for contest announcements         | -               | Yes      |
-| `CLIST_USERNAME`         | Clist.by username                            | -               | Yes\*    |
-| `CLIST_API_KEY`          | Clist.by API key                             | -               | Yes\*    |
-| `TIMEZONE`               | Timezone for displaying dates and times      | UTC             | No       |
-| `CONTEST_ROLE_ID`        | Role ID to mention for contest announcements | -               | No       |
-| `CONTEST_DAYS_AHEAD`     | Number of days to look ahead for contests    | 7               | No       |
-| `CONTEST_CHECK_SCHEDULE` | Cron schedule for checking contests          | '0 12 \* \* \*' | No       |
-| `PORT`                   | Port for the health check server             | 3000            | No       |
+| Variable                 | Description                                                                                      | Default         | Required |
+| ------------------------ | ------------------------------------------------------------------------------------------------ | --------------- | -------- |
+| `DISCORD_TOKEN`          | Discord bot token                                                                                | -               | Yes      |
+| `DISCORD_CHANNEL_ID`     | Channel ID for scheduled reminders (command responses go to the channel where commands are used) | -               | Yes      |
+| `CLIST_USERNAME`         | Clist.by username                                                                                | -               | Yes\*    |
+| `CLIST_API_KEY`          | Clist.by API key                                                                                 | -               | Yes\*    |
+| `TIMEZONE`               | Timezone for displaying dates and times                                                          | UTC             | No       |
+| `CONTEST_ROLE_ID`        | Role ID to mention for contest announcements                                                     | -               | No       |
+| `CONTEST_DAYS_AHEAD`     | Number of days to look ahead for contests                                                        | 7               | No       |
+| `CONTEST_CHECK_SCHEDULE` | Cron schedule for checking contests                                                              | '0 12 \* \* \*' | No       |
+| `PORT`                   | Port for the health check server                                                                 | 3000            | No       |
 
 \*Required for reliable AtCoder contest information. The bot will fall back to AtCoder Problems API if not provided.
 
@@ -223,7 +230,8 @@ Once running, the bot operates on these schedules:
 ### What to Expect
 
 - **First Messages**: After starting the bot, you won't receive any messages immediately unless there's a contest happening soon (within the next day).
-- **Regular Reminders**: As contest times approach, you'll receive reminder messages at the scheduled intervals.
+- **Regular Reminders**: As contest times approach, you'll receive reminder messages at the scheduled intervals in your configured announcement channel.
+- **Command Responses**: When users run commands like `!contests`, the responses will appear in the same channel where the command was issued.
 - **Message Format**: Each reminder is a separate Discord embed containing:
   - Contest name and platform
   - Date and time (in your configured timezone)
@@ -237,9 +245,10 @@ All times shown by the bot will be in your configured timezone (set via the `TIM
 If you don't see any messages:
 
 1. Check if there are upcoming contests within 7 days (or your configured `CONTEST_DAYS_AHEAD` value)
-2. Verify your `DISCORD_CHANNEL_ID` is set correctly
-3. Use `!health` command to check API connections
-4. Check your console logs for any errors
+2. Verify your `DISCORD_CHANNEL_ID` is set correctly for scheduled reminders
+3. For command responses, ensure you're looking in the channel where you typed the command
+4. Use `!health` command to check API connections
+5. Check your console logs for any errors
 
 If you don't see AtCoder contests:
 

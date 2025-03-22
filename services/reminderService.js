@@ -146,11 +146,12 @@ function scheduleReminder(client, contest, reminderTime, timeText, contestId) {
 /**
  * Sends reminders for contests happening today
  * @param {Client} client - Discord.js client
+ * @param {Channel} responseChannel - Optional channel to send response to. If not provided, uses DISCORD_CHANNEL_ID
  */
-async function sendTodayContestReminders(client) {
+async function sendTodayContestReminders(client, responseChannel = null) {
   try {
     const contests = await fetchContests();
-    const channelId = process.env.DISCORD_CHANNEL_ID;
+    const defaultChannelId = process.env.DISCORD_CHANNEL_ID;
     const now = Date.now();
     
     // Get contests happening today based on the configured timezone
@@ -175,15 +176,18 @@ async function sendTodayContestReminders(client) {
       return contest.startTimeMs > now + (6 * 60 * 60 * 1000);
     });
     
-    if (contestsToRemind.length === 0) {
-      console.log('No contests today that are at least 6 hours away');
-      return;
+    // Use the provided response channel or fetch the default channel
+    const channel = responseChannel || await client.channels.fetch(defaultChannelId);
+    
+    if (!channel) {
+      console.error(`Could not find channel ${responseChannel ? 'provided' : `with ID ${defaultChannelId}`}`);
+      return false;
     }
     
-    const channel = await client.channels.fetch(channelId);
-    if (!channel) {
-      console.error(`Could not find channel with ID ${channelId}`);
-      return;
+    if (contestsToRemind.length === 0) {
+      console.log('No contests today that are at least 6 hours away');
+      await channel.send('No contests happening today (or contests are less than 6 hours away).');
+      return false;
     }
     
     for (const contest of contestsToRemind) {
@@ -198,20 +202,23 @@ async function sendTodayContestReminders(client) {
       });
     }
     
+    return true;
   } catch (error) {
     console.error('Error sending today\'s contest reminders:', error);
+    return false;
   }
 }
 
 /**
  * Checks if there are any contests tomorrow and sends a notification
  * @param {Client} client - Discord.js client
+ * @param {Channel} responseChannel - Optional channel to send response to. If not provided, uses DISCORD_CHANNEL_ID
  * @returns {Promise<boolean>} True if contests were found and notification sent
  */
-async function checkTomorrowContests(client) {
+async function checkTomorrowContests(client, responseChannel = null) {
   try {
     const contests = await fetchContests();
-    const channelId = process.env.DISCORD_CHANNEL_ID;
+    const defaultChannelId = process.env.DISCORD_CHANNEL_ID;
     
     // Get contests happening tomorrow based on the configured timezone
     const timezone = process.env.TIMEZONE || 'UTC';
@@ -229,13 +236,16 @@ async function checkTomorrowContests(client) {
       return contestDateString === tomorrowDateString;
     });
     
-    if (tomorrowContests.length === 0) {
+    // Use the provided response channel or fetch the default channel
+    const channel = responseChannel || await client.channels.fetch(defaultChannelId);
+    
+    if (!channel) {
+      console.error(`Could not find channel ${responseChannel ? 'provided' : `with ID ${defaultChannelId}`}`);
       return false;
     }
     
-    const channel = await client.channels.fetch(channelId);
-    if (!channel) {
-      console.error(`Could not find channel with ID ${channelId}`);
+    if (tomorrowContests.length === 0) {
+      await channel.send('No contests scheduled for tomorrow.');
       return false;
     }
     
