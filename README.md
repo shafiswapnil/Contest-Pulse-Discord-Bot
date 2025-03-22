@@ -10,6 +10,7 @@ A Discord bot that provides timely reminders for upcoming Codeforces and AtCoder
 - **Smart Filtering**: Only sends reminders for contests that are at least 6 hours away when checking today's contests
 - **Multiple Data Sources**: Uses Codeforces API and multiple sources for AtCoder (Clist.by, direct website scraping, and AtCoder Problems API)
 - **Localized Time Display**: Shows contest times in your preferred timezone (e.g., Bangladesh time)
+- **Role-Based Admin Controls**: Restricts administrative commands to users with specific roles
 - **Optimized for Railway Deployment**: Includes health checks and monitoring with automatic port selection
 - **Automatic Scheduling**: Refreshes contest information daily
 - **Resilient Architecture**: Multiple fallback methods for fetching contest data
@@ -20,9 +21,15 @@ A Discord bot that provides timely reminders for upcoming Codeforces and AtCoder
 - `!today` - Check if there are any contests happening today
 - `!tomorrow` - Check if there are any contests scheduled for tomorrow
 - `!atcoder` - Show upcoming AtCoder contests specifically (looking ahead 60 days)
-- `!setup-reminders` - Manually set up contest reminders
 - `!health` - Check the bot's connection status to various services
 - `!help` - Show a list of available commands
+
+### Admin Commands (requires admin role)
+
+- `!admin` - Show available admin commands
+- `!setup-reminders` - Manually set up contest reminders
+- `!refresh-contests` - Force refresh contest data and update reminders
+- `!status` - Show detailed bot status and scheduled reminders
 
 ## How It Works
 
@@ -116,6 +123,7 @@ CLIST_USERNAME=your_clist_username
 CLIST_API_KEY=your_clist_api_key
 TIMEZONE=Asia/Dhaka  # For Bangladesh time
 CONTEST_ROLE_ID=optional_role_to_mention  # Optional
+ADMIN_ROLE_ID=your_admin_role_id  # Role that can use admin commands
 CONTEST_CHECK_SCHEDULE=0 12 * * *  # Daily at 12:00 UTC (cron format)
 ```
 
@@ -148,6 +156,7 @@ npm run dev
 | `CLIST_API_KEY`          | Clist.by API key                                                                                 | -               | Yes\*    |
 | `TIMEZONE`               | Timezone for displaying dates and times                                                          | UTC             | No       |
 | `CONTEST_ROLE_ID`        | Role ID to mention for contest announcements                                                     | -               | No       |
+| `ADMIN_ROLE_ID`          | Role ID that can use administrative commands                                                     | -               | No       |
 | `CONTEST_DAYS_AHEAD`     | Number of days to look ahead for contests                                                        | 7               | No       |
 | `CONTEST_CHECK_SCHEDULE` | Cron schedule for checking contests                                                              | '0 12 \* \* \*' | No       |
 | `PORT`                   | Port for the health check server                                                                 | 3000            | No       |
@@ -178,6 +187,22 @@ Common timezone options:
 - `Europe/London` - UK
 - `America/New_York` - US Eastern
 - `America/Los_Angeles` - US Pacific
+
+## Admin Role Setup
+
+To restrict administrative commands to specific users:
+
+1. Create a role in your Discord server (e.g., "Contest Bot Admin")
+2. Right-click on the role and select "Copy ID" (make sure Developer Mode is enabled in Discord settings)
+3. Add the role ID to your `.env` file as `ADMIN_ROLE_ID`
+4. Assign this role to users who should have administrative access to the bot
+
+Users with this role will be able to use commands like:
+
+- `!admin` - View all admin commands
+- `!setup-reminders` - Manually set up contest reminders
+- `!refresh-contests` - Force refresh contest data
+- `!status` - View detailed bot status
 
 ## License
 

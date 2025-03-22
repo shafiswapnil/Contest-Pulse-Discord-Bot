@@ -49,6 +49,37 @@ client.on('messageCreate', async message => {
   // Ignore messages from the bot
   if (message.author.bot) return;
   
+  // Helper function to check if user has admin role
+  const isAdmin = () => {
+    const adminRoleId = process.env.ADMIN_ROLE_ID;
+    
+    // If no admin role is set, no one has admin privileges
+    if (!adminRoleId) return false;
+    
+    // If DM, only let server admins use admin commands
+    if (!message.guild) return false;
+    
+    // Check if the user has the admin role
+    return message.member.roles.cache.has(adminRoleId);
+  };
+  
+  // Admin commands
+  if (message.content === '!admin' && isAdmin()) {
+    const embed = new EmbedBuilder()
+      .setTitle('Admin Commands')
+      .setColor(0xFF5733)
+      .setDescription('The following admin commands are available:')
+      .addFields(
+        { name: '!setup-reminders', value: 'Manually trigger setup of contest reminders', inline: false },
+        { name: '!refresh-contests', value: 'Force refresh contest data and update reminders', inline: false },
+        { name: '!status', value: 'Show detailed bot status and scheduled reminders', inline: false }
+      )
+      .setFooter({ text: 'Admin-only commands' });
+    
+    message.channel.send({ embeds: [embed] });
+    return;
+  }
+  
   // Handle contest command
   if (message.content.toLowerCase() === '!contests') {
     message.channel.send('Checking for upcoming contests...');
@@ -160,11 +191,57 @@ client.on('messageCreate', async message => {
     await sendTodayContestReminders(client, message.channel);
   }
   
-  // Manual reminder setup
+  // Manual reminder setup - admin only
   if (message.content === '!setup-reminders') {
+    if (!isAdmin()) {
+      message.channel.send('Sorry, only administrators can use this command.');
+      return;
+    }
+    
     message.channel.send('Setting up contest reminders...');
     await scheduleContestReminders(client);
     message.channel.send('Contest reminders have been set up. You will receive notifications 1 day, 6 hours, and 30 minutes before each contest.');
+  }
+  
+  // Force refresh contests - admin only
+  if (message.content === '!refresh-contests') {
+    if (!isAdmin()) {
+      message.channel.send('Sorry, only administrators can use this command.');
+      return;
+    }
+    
+    message.channel.send('Refreshing contest data...');
+    const contests = await fetchContests();
+    await scheduleContestReminders(client);
+    message.channel.send(`Refreshed contest data. Found ${contests.length} upcoming contests and updated all reminders.`);
+  }
+  
+  // Show detailed status - admin only
+  if (message.content === '!status') {
+    if (!isAdmin()) {
+      message.channel.send('Sorry, only administrators can use this command.');
+      return;
+    }
+    
+    const contests = await fetchContests();
+    const healthStatus = await runHealthChecks();
+    
+    const codeforcesCount = contests.filter(c => c.platform === 'Codeforces').length;
+    const atcoderCount = contests.filter(c => c.platform === 'AtCoder').length;
+    
+    const embed = new EmbedBuilder()
+      .setTitle('Bot Status')
+      .setColor(0x00FF00)
+      .addFields(
+        { name: 'Connection Status', value: healthStatus.status, inline: false },
+        { name: 'Upcoming Contests', value: `Total: ${contests.length} (Codeforces: ${codeforcesCount}, AtCoder: ${atcoderCount})`, inline: false },
+        { name: 'Target Channel', value: `<#${process.env.DISCORD_CHANNEL_ID}>`, inline: false },
+        { name: 'Timezone', value: process.env.TIMEZONE || 'UTC', inline: false },
+        { name: 'Looking Ahead', value: `${process.env.CONTEST_DAYS_AHEAD || '7'} days`, inline: false }
+      )
+      .setTimestamp();
+    
+    message.channel.send({ embeds: [embed] });
   }
   
   // Health check command
@@ -198,11 +275,22 @@ client.on('messageCreate', async message => {
         { name: '!today', value: 'Show contests happening today', inline: false },
         { name: '!tomorrow', value: 'Show contests happening tomorrow', inline: false },
         { name: '!atcoder', value: 'Show all upcoming AtCoder contests for the next 60 days', inline: false },
-        { name: '!setup-reminders', value: 'Manually set up contest reminders', inline: false },
         { name: '!health', value: 'Check the bot\'s connection to APIs', inline: false },
         { name: '!help', value: 'Show this help message', inline: false }
-      )
-      .setFooter({ text: 'Contest Bot - Get reminders for upcoming programming contests' });
+      );
+    
+    // Only add info about admin commands if the user has the admin role
+    if (isAdmin()) {
+      embed.addFields(
+        { name: 'Admin Commands', value: 'Use `!admin` to see all admin commands available to you', inline: false }
+      );
+    } else {
+      embed.addFields(
+        { name: 'Admin Commands', value: 'Some commands are restricted to users with the admin role', inline: false }
+      );
+    }
+    
+    embed.setFooter({ text: 'Contest Bot - Get reminders for upcoming programming contests' });
     
     message.channel.send({ embeds: [embed] });
   }
