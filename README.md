@@ -147,10 +147,9 @@ npm run dev
      - `CONTEST_CHECK_SCHEDULE` - Cron expression for when to check contests (default: '0 12 \* \* \*', daily at 12:00 UTC)
      - `LOG_LEVEL` - Logging level: debug, info, warn, or error (default: info)
 
-     **API Authentication (if needed in the future):**
+     **API Authentication (not currently used):**
 
-     - `CODEFORCES_API_KEY` - Your Codeforces API key
-     - `CODEFORCES_API_SECRET` - Your Codeforces API secret
+     - You do not need to set Codeforces API credentials as the public API is used
 
      **Server Configuration:**
 
@@ -183,17 +182,17 @@ npm run dev
 
 You can configure the bot by setting the following environment variables:
 
-| Variable                 | Description                                    | Default                           |
-| ------------------------ | ---------------------------------------------- | --------------------------------- |
-| `DISCORD_TOKEN`          | Your Discord bot token (required)              | -                                 |
-| `DISCORD_CHANNEL_ID`     | The channel ID for announcements (required)    | -                                 |
-| `CONTEST_ROLE_ID`        | Role ID to mention for contest announcements   | -                                 |
-| `CONTEST_DAYS_AHEAD`     | Number of days to look ahead for contests      | 7                                 |
-| `CONTEST_CHECK_SCHEDULE` | Cron schedule expression for checking contests | `0 12 * * *` (daily at 12:00 UTC) |
-| `CODEFORCES_API_KEY`     | Codeforces API key (optional)                  | -                                 |
-| `CODEFORCES_API_SECRET`  | Codeforces API secret (optional)               | -                                 |
-| `LOG_LEVEL`              | Logging level (debug, info, warn, error)       | info                              |
-| `PORT`                   | Port for the health check server               | 3000                              |
+| Variable                 | Description                                    | Default                           | Required |
+| ------------------------ | ---------------------------------------------- | --------------------------------- | -------- |
+| `DISCORD_TOKEN`          | Your Discord bot token                         | -                                 | Yes      |
+| `DISCORD_CHANNEL_ID`     | The channel ID for announcements               | -                                 | Yes      |
+| `CONTEST_ROLE_ID`        | Role ID to mention for contest announcements   | -                                 | No       |
+| `CONTEST_DAYS_AHEAD`     | Number of days to look ahead for contests      | 7                                 | No       |
+| `CONTEST_CHECK_SCHEDULE` | Cron schedule expression for checking contests | `0 12 * * *` (daily at 12:00 UTC) | No       |
+| `CODEFORCES_API_KEY`     | Codeforces API key (not currently used)        | -                                 | No       |
+| `CODEFORCES_API_SECRET`  | Codeforces API secret (not currently used)     | -                                 | No       |
+| `LOG_LEVEL`              | Logging level (debug, info, warn, error)       | info                              | No       |
+| `PORT`                   | Port for the health check server               | 3000                              | No       |
 
 ## Usage
 
@@ -222,7 +221,7 @@ To check the health of your bot:
 
 ## API Notes
 
-- **Codeforces API**: Uses the official public API (https://codeforces.com/api/contest.list). This API currently doesn't require authentication, but the bot supports API keys if they're needed in the future.
+- **Codeforces API**: Uses the official public API (https://codeforces.com/api/contest.list). This API is publicly accessible and doesn't require authentication. While the bot includes support for API credentials, they're not currently used.
 
 - **AtCoder API**: AtCoder doesn't provide an official API. The bot uses the unofficial AtCoder Problems API maintained by kenkoooo (https://github.com/kenkoooo/AtCoderProblems/blob/master/doc/api.md). This API doesn't require authentication but has rate limiting guidelines that the bot respects.
 

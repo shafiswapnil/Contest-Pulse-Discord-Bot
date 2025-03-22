@@ -7,24 +7,30 @@ const axios = require('axios');
 async function fetchCodeforcesContests() {
   try {
     let url = 'https://codeforces.com/api/contest.list';
-    let params = {};
     
-    // Use API key and secret if provided
+    // Check if API credentials are provided
     const apiKey = process.env.CODEFORCES_API_KEY;
     const apiSecret = process.env.CODEFORCES_API_SECRET;
     
-    if (apiKey && apiSecret) {
+    // Only use credentials if both key and secret are provided and not empty placeholders
+    const useCredentials = 
+      apiKey && 
+      apiSecret && 
+      apiKey !== 'your_codeforces_api_key_here' &&
+      apiSecret !== 'your_codeforces_api_secret_here';
+    
+    let response;
+    if (useCredentials) {
       console.log('Using Codeforces API credentials');
-      // Codeforces API authentication parameters
-      // These would be used if the API required authentication in the future
-      params = {
-        apiKey,
-        time: Math.floor(Date.now() / 1000)
-        // Normally would need to add a hash signature, but not implementing full auth flow here
-      };
+      // Implement proper Codeforces authentication if needed in the future
+      // Currently not implementing full authentication as the public API works without it
+      
+      // For now, log a warning and use the public API instead
+      console.log('Warning: Codeforces API authentication is not fully implemented. Using public API instead.');
     }
     
-    const response = await axios.get(url, { params });
+    // Always use the public API for now
+    response = await axios.get(url);
     
     if (response.data.status !== 'OK') {
       console.error('Codeforces API returned non-OK status:', response.data.status);
