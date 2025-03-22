@@ -57,6 +57,7 @@ async function fetchCodeforcesContests() {
         startTime: startDate.toLocaleTimeString(),
         endTime: endDate.toLocaleTimeString(),
         startTimeMs,
+        endTimeMs,
         url: `https://codeforces.com/contests/${contest.id}`,
       };
     });
@@ -186,58 +187,70 @@ async function fetchAtCoderContests() {
  */
 function formatClistContests(contests) {
   return contests.map(contest => {
-    // Handle potential differences in field names between versions
-    const startField = contest.start || contest.startTime || contest.start_time;
-    const endField = contest.end || contest.endTime || contest.end_time;
-    const eventField = contest.event || contest.name || contest.title;
-    const urlField = contest.href || contest.url || contest.link;
-    const resourceField = contest.resource || contest.platform || '';
-    
-    const startTimeMs = new Date(startField).getTime();
-    const endTimeMs = new Date(endField).getTime();
-    
-    const startDate = new Date(startTimeMs);
-    const endDate = new Date(endTimeMs);
-    
-    // Determine platform based on URL, resource field, or title
-    let platform = 'Unknown';
-    
-    if (resourceField && typeof resourceField === 'string') {
-      if (resourceField.toLowerCase().includes('atcoder')) {
-        platform = 'AtCoder';
-      } else if (resourceField.toLowerCase().includes('codeforces')) {
-        platform = 'Codeforces';
+    try {
+      // Handle potential differences in field names between versions
+      const startField = contest.start || contest.startTime || contest.start_time;
+      const endField = contest.end || contest.endTime || contest.end_time;
+      const eventField = contest.event || contest.name || contest.title;
+      const urlField = contest.href || contest.url || contest.link;
+      const resourceField = contest.resource || contest.platform || '';
+      
+      const startTimeMs = new Date(startField).getTime();
+      const endTimeMs = new Date(endField).getTime();
+      
+      // Skip contests with invalid dates
+      if (isNaN(startTimeMs) || isNaN(endTimeMs)) {
+        console.warn(`Skipping contest with invalid date: ${eventField || 'unknown contest'}`);
+        return null;
       }
-    }
-    
-    // If no platform determined yet, check the URL
-    if (platform === 'Unknown' && urlField) {
-      if (urlField.includes('atcoder.jp')) {
-        platform = 'AtCoder';
-      } else if (urlField.includes('codeforces.com')) {
-        platform = 'Codeforces';
+      
+      const startDate = new Date(startTimeMs);
+      const endDate = new Date(endTimeMs);
+      
+      // Determine platform based on URL, resource field, or title
+      let platform = 'Unknown';
+      
+      if (resourceField && typeof resourceField === 'string') {
+        if (resourceField.toLowerCase().includes('atcoder')) {
+          platform = 'AtCoder';
+        } else if (resourceField.toLowerCase().includes('codeforces')) {
+          platform = 'Codeforces';
+        }
       }
-    }
-    
-    // If still unknown, try to determine from the event name
-    if (platform === 'Unknown' && eventField) {
-      if (eventField.toLowerCase().includes('atcoder')) {
-        platform = 'AtCoder';
-      } else if (eventField.toLowerCase().includes('codeforces')) {
-        platform = 'Codeforces';
+      
+      // If no platform determined yet, check the URL
+      if (platform === 'Unknown' && urlField) {
+        if (urlField.includes('atcoder.jp')) {
+          platform = 'AtCoder';
+        } else if (urlField.includes('codeforces.com')) {
+          platform = 'Codeforces';
+        }
       }
+      
+      // If still unknown, try to determine from the event name
+      if (platform === 'Unknown' && eventField) {
+        if (eventField.toLowerCase().includes('atcoder')) {
+          platform = 'AtCoder';
+        } else if (eventField.toLowerCase().includes('codeforces')) {
+          platform = 'Codeforces';
+        }
+      }
+      
+      return {
+        platform: platform,
+        name: eventField,
+        date: startDate.toDateString(),
+        startTime: startDate.toLocaleTimeString(),
+        endTime: endDate.toLocaleTimeString(),
+        startTimeMs,
+        endTimeMs,
+        url: urlField,
+      };
+    } catch (err) {
+      console.error(`Error processing Clist contest: ${contest.event || contest.name || 'unknown contest'}`, err);
+      return null;
     }
-    
-    return {
-      platform: platform,
-      name: eventField,
-      date: startDate.toDateString(),
-      startTime: startDate.toLocaleTimeString(),
-      endTime: endDate.toLocaleTimeString(),
-      startTimeMs,
-      url: urlField,
-    };
-  });
+  }).filter(contest => contest !== null);  // Filter out null entries
 }
 
 /**
@@ -269,42 +282,59 @@ async function fetchAtCoderContestsFromProblems() {
     const now = Date.now();
     // Filter for upcoming contests only
     const upcomingContests = response.data.filter(contest => {
-      // The API provides start_time and end_time as ISO 8601 strings
-      const startTimeMs = new Date(contest.start_time).getTime();
-      return startTimeMs > now;
+      try {
+        // The API provides start_time and end_time as ISO 8601 strings
+        const startTimeMs = new Date(contest.start_time).getTime();
+        return startTimeMs > now && !isNaN(startTimeMs);
+      } catch (err) {
+        console.error(`Error filtering contest: ${contest.id || 'unknown contest'}`);
+        return false;
+      }
     });
     
     console.log(`Found ${upcomingContests.length} upcoming AtCoder contests from Problems API`);
     
     // Format contests to a standardized structure
     return upcomingContests.map(contest => {
-      const startTimeMs = new Date(contest.start_time).getTime();
-      const endTimeMs = new Date(contest.end_time).getTime();
-      
-      const startDate = new Date(startTimeMs);
-      const endDate = new Date(endTimeMs);
-      
-      // Determine the platform based on contest ID or title
-      let platform = 'AtCoder';  // Default is AtCoder since this API is primarily for AtCoder
-      
-      // If contest title or ID contains "codeforces", override the platform
-      if (contest.title && contest.title.toLowerCase().includes('codeforces') || 
-          contest.id && contest.id.toLowerCase().includes('codeforces')) {
-        platform = 'Codeforces';
+      try {
+        const startTimeMs = new Date(contest.start_time).getTime();
+        const endTimeMs = new Date(contest.end_time).getTime();
+        
+        const startDate = new Date(startTimeMs);
+        const endDate = new Date(endTimeMs);
+        
+        // Only include contests with valid dates
+        if (isNaN(startTimeMs) || isNaN(endTimeMs)) {
+          console.warn(`Skipping contest with invalid date: ${contest.id || 'unknown contest'}`);
+          return null;
+        }
+        
+        // Determine the platform based on contest ID or title
+        let platform = 'AtCoder';  // Default is AtCoder since this API is primarily for AtCoder
+        
+        // If contest title or ID contains "codeforces", override the platform
+        if ((contest.title && contest.title.toLowerCase().includes('codeforces')) || 
+            (contest.id && contest.id.toLowerCase().includes('codeforces'))) {
+          platform = 'Codeforces';
+        }
+        
+        return {
+          platform: platform,
+          name: contest.title,
+          date: startDate.toDateString(),
+          startTime: startDate.toLocaleTimeString(),
+          endTime: endDate.toLocaleTimeString(),
+          startTimeMs,
+          endTimeMs,
+          url: platform === 'Codeforces' 
+             ? `https://codeforces.com/contests/${contest.id}`
+             : `https://atcoder.jp/contests/${contest.id}`,
+        };
+      } catch (err) {
+        console.error(`Error processing contest: ${contest.id || 'unknown contest'}`, err);
+        return null;
       }
-      
-      return {
-        platform: platform,
-        name: contest.title,
-        date: startDate.toDateString(),
-        startTime: startDate.toLocaleTimeString(),
-        endTime: endDate.toLocaleTimeString(),
-        startTimeMs,
-        url: platform === 'Codeforces' 
-           ? `https://codeforces.com/contests/${contest.id}`
-           : `https://atcoder.jp/contests/${contest.id}`,
-      };
-    });
+    }).filter(contest => contest !== null);  // Filter out null entries
   } catch (error) {
     console.error('Error fetching AtCoder contests from Problems API:', error.message);
     return [];

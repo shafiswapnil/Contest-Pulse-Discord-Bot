@@ -146,3 +146,65 @@ Common timezone options:
 ## License
 
 ISC
+
+## Bot Behavior
+
+### What Happens When You First Run the Bot
+
+When you first start the bot, the following sequence of events occurs:
+
+1. **Initial Connection**: The bot connects to Discord and logs in with your credentials.
+2. **Health Check Server**: A health check HTTP server starts on port 3000 (or the next available port if 3000 is busy).
+3. **Daily Contest Check Schedule**: The bot sets up a daily schedule to check for new contests, typically at 12:00 UTC (configurable via `CONTEST_CHECK_SCHEDULE`).
+4. **Initial Contest Fetch**: The bot immediately fetches upcoming contests from:
+   - Codeforces API (public, no authentication needed)
+   - AtCoder contests via Clist.by API (using your Clist.by credentials)
+5. **Reminder Scheduling**: For each upcoming contest found, the bot schedules reminder messages at:
+   - 1 day before the contest
+   - 6 hours before the contest
+   - 30 minutes before the contest
+
+The bot logs all these activities to the console so you can verify it's working correctly.
+
+### Ongoing Bot Behavior
+
+Once running, the bot operates on these schedules:
+
+1. **Daily Contest Refresh**: Every day at the scheduled time (default: 12:00 UTC), the bot will:
+
+   - Fetch the latest contest information
+   - Schedule new reminders for any newly discovered contests
+   - The refresh ensures you always have the most up-to-date contest information
+
+2. **Automated Reminders**: When a scheduled reminder time is reached, the bot will:
+
+   - Send a message to your configured Discord channel
+   - Tag the contest role if you configured one with `CONTEST_ROLE_ID`
+   - Include formatted contest information with correct time in your timezone
+
+3. **On-Demand Commands**: You can also interact with the bot using commands:
+   - `!contests` - Shows all upcoming contests
+   - `!today` - Shows contests happening today
+   - `!tomorrow` - Shows contests happening tomorrow
+   - `!help` - Shows available commands
+
+### What to Expect
+
+- **First Messages**: After starting the bot, you won't receive any messages immediately unless there's a contest happening soon (within the next day).
+- **Regular Reminders**: As contest times approach, you'll receive reminder messages at the scheduled intervals.
+- **Message Format**: Each reminder is a separate Discord embed containing:
+  - Contest name and platform
+  - Date and time (in your configured timezone)
+  - Link to the contest page
+  - Color coding (blue for day notifications, yellow for hours, red for minutes)
+
+All times shown by the bot will be in your configured timezone (set via the `TIMEZONE` environment variable, e.g., `Asia/Dhaka` for Bangladesh time).
+
+### Troubleshooting
+
+If you don't see any messages:
+
+1. Check if there are upcoming contests within 7 days (or your configured `CONTEST_DAYS_AHEAD` value)
+2. Verify your `DISCORD_CHANNEL_ID` is set correctly
+3. Use `!health` command to check API connections
+4. Check your console logs for any errors

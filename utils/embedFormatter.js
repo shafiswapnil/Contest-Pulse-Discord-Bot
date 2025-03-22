@@ -84,7 +84,19 @@ function createContestsEmbed(contests) {
     
     contestsByDate[date].forEach(contest => {
       const startDate = new Date(contest.startTimeMs);
-      const endDate = new Date(contest.startTimeMs + (contest.endTime ? new Date(contest.endTime).getTime() - startDate.getTime() : 2 * 60 * 60 * 1000));
+      // Calculate end date correctly
+      let endDate;
+      
+      if (contest.endTimeMs) {
+        // If we have endTimeMs directly
+        endDate = new Date(contest.endTimeMs);
+      } else if (typeof contest.endTime === 'string' && !contest.endTime.includes('Invalid')) {
+        // If endTime is a valid string
+        endDate = new Date(contest.endTime);
+      } else {
+        // Default duration (2 hours)
+        endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
+      }
       
       const startTimeFormatted = formatDateInTimezone(startDate, 'time');
       const endTimeFormatted = formatDateInTimezone(endDate, 'time');
@@ -127,7 +139,19 @@ function createContestEmbed(contest, timeText) {
   
   // Format dates in the configured timezone
   const startDate = new Date(contest.startTimeMs);
-  const endDate = new Date(contest.startTimeMs + (contest.endTime ? new Date(contest.endTime).getTime() - startDate.getTime() : 2 * 60 * 60 * 1000));
+  
+  // Calculate end date correctly
+  let endDate;
+  if (contest.endTimeMs) {
+    // If we have endTimeMs directly
+    endDate = new Date(contest.endTimeMs);
+  } else if (typeof contest.endTime === 'string' && !contest.endTime.includes('Invalid')) {
+    // If endTime is a valid string
+    endDate = new Date(contest.endTime);
+  } else {
+    // Default duration (2 hours)
+    endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
+  }
   
   const dateFormatted = formatDateInTimezone(startDate, 'date');
   const startTimeFormatted = formatDateInTimezone(startDate, 'time');

@@ -170,7 +170,22 @@ console.log('Environment:', {
 // Set up health check server
 function setupHealthServer() {
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  let PORT = parseInt(process.env.PORT || '3000', 10);
+  
+  // Create server with error handling
+  const startServer = () => {
+    const server = app.listen(PORT, () => {
+      console.log(`Health check server running on port ${PORT}`);
+    }).on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.log(`Port ${PORT} is already in use, trying port ${PORT + 1}`);
+        PORT += 1;
+        startServer(); // Try the next port
+      } else {
+        console.error('Failed to start health check server:', err);
+      }
+    });
+  };
   
   app.get('/', (req, res) => {
     res.send('Contest Bot is running!');
@@ -185,7 +200,5 @@ function setupHealthServer() {
     }
   });
   
-  app.listen(PORT, () => {
-    console.log(`Health check server running on port ${PORT}`);
-  });
+  startServer();
 } 
